@@ -16,12 +16,18 @@ venv/
 *.db-journal
 *.db-shm
 *.db-wal
+*.db.test
+*.db.test-journal
+*.db.api_test
 *.log
 *.log.*
+*.auth.json
 
 # Local generated sample/cache data
 backtest/data/pkl/
 backtest/pkl/
+backtest/data/*.db*
+trading/db/
 
 # Workspace-only assistant files
 AGENTS.md
