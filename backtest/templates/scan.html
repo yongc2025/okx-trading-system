@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% set active = "scan" %}
+{% block title %}极端行情扫描 - OKX 回测系统{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>⚡ 极端行情扫描</h2>
+    <p style="color:#8b949e;margin-bottom:16px;font-size:14px;">
+        扫描所有币种的 1 分钟 K 线，识别涨跌幅超过阈值的极端行情事件。
+    </p>
+    <div class="filters">
+        <label style="color:#8b949e;">涨跌幅阈值:</label>
+        <select id="threshold-select">
+            <option value="0.05">5%</option>
+            <option value="0.10" selected>10%</option>
+            <option value="0.15">15%</option>
+            <option value="0.20">20%</option>
+        </select>
+        <button class="btn btn-primary" id="scan-btn" onclick="startScan()">🔍 开始扫描</button>
+        <button class="btn" onclick="loadSummary()">📊 刷新摘要</button>
+        <span id="scan-status" style="color:#8b949e;font-size:14px;"></span>
+    </div>
+</div>
+
+<!-- 扫描摘要 -->
+<div class="stats-grid" id="summary-cards"></div>
+
+<!-- 筛选器 -->
+<div class="card">
+    <h2>📋 扫描结果</h2>
+    <div class="filters">
+        <label style="color:#8b949e;">方向:</label>
+        <select id="filter-direction" onchange="loadResults()">
+            <option value="">全部</option>
+            <option value="surge">暴涨 🚀</option>
+            <option value="plunge">暴跌 💥</option>
+        </select>
+        <label style="color:#8b949e;">最小涨跌幅:</label>
+        <select id="filter-min-pct" onchange="loadResults()">
+            <option value="">全部</option>
+            <option value="0.10">≥10%</option>
+            <option value="0.15">≥15%</option>
+            <option value="0.20">≥20%</option>
+        </select>
+        <label style="color:#8b949e;">币种:</label>
+        <select id="filter-symbol" onchange="loadResults()">
+            <option value="">全部币种</option>
+        </select>
+        <label style="color:#8b949e;">排序:</label>
+        <select id="sort-field" onchange="loadResults()">
+            <option value="change_pct">涨跌幅</option>
+            <option value="scan_time">时间</option>
+            <option value="volume">成交量</option>
+        </select>
+        <button class="btn" onclick="loadResults()">🔄 刷新</button>
+        <button class="btn" onclick="exportCSV()">📥 导出 CSV</button>
+    </div>
+    <div class="table-scroll">
+        <table id="results-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>币种</th>
+                    <th>时间</th>
+                    <th>方向</th>
+                    <th>涨跌幅</th>
+                    <th>开盘价</th>
+                    <th>收盘价</th>
+                    <th>最高价</th>
+                    <th>最低价</th>
+                    <th>成交量</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div style="margin-top:12px;color:#8b949e;font-size:13px;">
+        <span id="result-count">0</span> 条结果
+        <button class="btn" style="margin-left:12px;" onclick="loadResults(200)">加载更多 (200)</button>
+        <button class="btn" onclick="loadResults(500)">加载更多 (500)</button>
+    </div>
+</div>
+
+<!-- 币种分布 -->
+<div class="two-col">
+    <div class="card">
+        <h2>📊 暴涨/暴跌分布</h2>
+        <div class="chart-container small" id="direction-pie"></div>
+    </div>
+    <div class="card">
+        <h2>🏆 Top 10 币种极端事件数</h2>
+        <div class="chart-container small" id="top-symbols-chart"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentLimit = 100;
+
+async function startScan() {
+    const btn = document.getElementById('scan-btn');
+    const status = document.getElementById('scan-status');
+    const threshold = document.getElementById('threshold-select').value;
+
+    btn.disabled = true;
+    btn.textContent = '⏳ 扫描中...';
+    status.textContent = '正在扫描所有币种，请稍候...';
+
+    try {
+        const resp = await fetch(`/api/scan?threshold=${threshold}`, { method: 'POST' });
+        const result = await resp.json();
+
+        if (result.error) {
+            status.textContent = `❌ 错误: ${result.error}`;
+            showToast(result.error, 'error');
+        } else {
+            status.textContent = `✅ 扫描完成: ${result.scanned_symbols} 个币种, 发现 ${result.total_extreme_events} 个极端事件`;
+            showToast(`扫描完成! 发现 ${result.total_extreme_events} 个极端事件`);
+            loadSummary();
+            loadResults();
+        }
+    } catch (e) {
+        status.textContent = `❌ 请求失败: ${e.message}`;
+        showToast('扫描请求失败', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔍 开始扫描';
+}
+
+async function loadSummary() {
+    try {
+        const data = await fetch('/api/scan/summary').then(r => r.json());
+        document.getElementById('summary-cards').innerHTML = `
+            <div class="stat-card"><div class="label">总事件数</div><div class="value neutral">${data.total||0}</div></div>
+            <div class="stat-card"><div class="label">涉及币种</div><div class="value neutral">${data.symbols||0}</div></div>
+            <div class="stat-card"><div class="label">暴涨次数</div><div class="value positive">${data.surges||0}</div></div>
+            <div class="stat-card"><div class="label">暴跌次数</div><div class="value negative">${data.plunges||0}</div></div>
+            <div class="stat-card"><div class="label">平均涨跌幅</div><div class="value neutral">${data.avg_change_pct?(data.avg_change_pct*100).toFixed(2)+'%':'N/A'}</div></div>
+            <div class="stat-card"><div class="label">最大涨跌幅</div><div class="value negative">${data.max_change_pct?(data.max_change_pct*100).toFixed(2)+'%':'N/A'}</div></div>
+        `;
+
+        // 方向饼图
+        if (data.surges !== undefined) {
+            const pieChart = echarts.init(document.getElementById('direction-pie'));
+            pieChart.setOption({
+                tooltip: { trigger: 'item', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+                series: [{
+                    type: 'pie', radius: ['40%', '70%'],
+                    data: [
+                        { name: '暴涨 🚀', value: data.surges, itemStyle: { color: '#3fb950' }},
+                        { name: '暴跌 💥', value: data.plunges, itemStyle: { color: '#f85149' }},
+                    ],
+                    label: { color: '#c9d1d9', formatter: '{b}: {c} ({d}%)' },
+                    itemStyle: { borderColor: '#161b22', borderWidth: 2 },
+                }],
+            });
+            window.addEventListener('resize', () => pieChart.resize());
+        }
+
+        // Top 币种
+        if (data.top_symbols && data.top_symbols.length > 0) {
+            const topChart = echarts.init(document.getElementById('top-symbols-chart'));
+            const top10 = data.top_symbols.slice(0, 10);
+            topChart.setOption({
+                tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+                grid: { left: 120, right: 20, top: 10, bottom: 20 },
+                xAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
+                yAxis: { type: 'category', data: top10.map(d => d.symbol).reverse(), axisLabel: { color: '#8b949e', fontSize: 11 }, axisLine: { lineStyle: { color: '#30363d' }}},
+                series: [{ type: 'bar', data: top10.map(d => d.events).reverse(), itemStyle: { color: '#f0883e' }}],
+            });
+            window.addEventListener('resize', () => topChart.resize());
+        }
+
+        // 填充币种筛选器
+        if (data.top_symbols) {
+            const sel = document.getElementById('filter-symbol');
+            const current = sel.value;
+            sel.innerHTML = '<option value="">全部币种</option>';
+            data.top_symbols.forEach(d => {
+                sel.innerHTML += `<option value="${d.symbol}" ${d.symbol===current?'selected':''}>${d.symbol} (${d.events})</option>`;
+            });
+        }
+    } catch (e) {
+        console.error('加载摘要失败:', e);
+    }
+}
+
+async function loadResults(limit) {
+    currentLimit = limit || currentLimit;
+    const direction = document.getElementById('filter-direction').value;
+    const minPct = document.getElementById('filter-min-pct').value;
+    const symbol = document.getElementById('filter-symbol').value;
+    const orderBy = document.getElementById('sort-field').value;
+
+    let url = `/api/scan/results?limit=${currentLimit}&order_by=${orderBy}&order_desc=true`;
+    if (direction) url += `&direction=${direction}`;
+    if (minPct) url += `&min_pct=${minPct}`;
+    if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
+
+    try {
+        const data = await fetch(url).then(r => r.json());
+        document.getElementById('result-count').textContent = data.length;
+
+        const tbody = document.querySelector('#results-table tbody');
+        tbody.innerHTML = data.map((r, i) => {
+            const isSurge = r.direction === 'surge';
+            const pctClass = isSurge ? 'positive' : 'negative';
+            const pctSign = isSurge ? '+' : '';
+            return `<tr>
+                <td>${i+1}</td>
+                <td><strong>${r.symbol}</strong></td>
+                <td>${String(r.scan_time).substring(0, 16)}</td>
+                <td><span class="badge ${isSurge?'badge-green':'badge-red'}">${isSurge?'暴涨🚀':'暴跌💥'}</span></td>
+                <td class="${pctClass}"><strong>${pctSign}${(r.change_pct*100).toFixed(2)}%</strong></td>
+                <td>${r.open_price}</td>
+                <td>${r.close_price}</td>
+                <td>${r.high_price||'-'}</td>
+                <td>${r.low_price||'-'}</td>
+                <td>${r.volume?r.volume.toFixed(0):'-'}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error('加载结果失败:', e);
+    }
+}
+
+function exportCSV() {
+    const direction = document.getElementById('filter-direction').value;
+    const minPct = document.getElementById('filter-min-pct').value;
+    let url = '/api/scan/export?';
+    if (direction) url += `direction=${direction}&`;
+    if (minPct) url += `min_pct=${minPct}&`;
+    window.open(url, '_blank');
+    showToast('正在导出 CSV...');
+}
+
+// 初始加载
+loadSummary();
+loadResults();
+</script>
+{% endblock %}

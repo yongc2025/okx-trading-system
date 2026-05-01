@@ -1,0 +1,1847 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OKX 交易助手</title>
+    <!-- 引入 TradingView 图表库 -->
+    <script
+      type="text/javascript"
+      src="https://s3.tradingview.com/tv.js"
+    ></script>
+    <style>
+      :root {
+        --bg-primary: #0d1117;
+        --bg-secondary: #161b22;
+        --bg-tertiary: #21262d;
+        --border: #30363d;
+        --text-primary: #e6edf3;
+        --text-secondary: #8b949e;
+        --accent-green: #3fb950;
+        --accent-red: #f85149;
+        --accent-blue: #58a6ff;
+        --accent-yellow: #d29922;
+        --accent-purple: #bc8cff;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* ========== 登录/注册页 ========== */
+      .auth-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+      }
+      .auth-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 40px;
+        width: 420px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      }
+      .auth-logo {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .auth-logo .icon {
+        font-size: 48px;
+        margin-bottom: 8px;
+      }
+      .auth-logo h1 {
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .auth-logo p {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+      }
+      .auth-form .form-group {
+        margin-bottom: 16px;
+      }
+      .auth-form label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+        font-weight: 500;
+      }
+      .auth-form input[type="password"],
+      .auth-form input[type="text"] {
+        width: 100%;
+        padding: 12px 14px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 14px;
+        transition: border-color 0.2s;
+      }
+      .auth-form input:focus {
+        border-color: var(--accent-blue);
+        outline: none;
+      }
+      .auth-btn {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.15s;
+        margin-top: 8px;
+      }
+      .auth-btn:hover {
+        opacity: 0.85;
+      }
+      .auth-btn.primary {
+        background: var(--accent-blue);
+        color: #fff;
+      }
+      .auth-btn.secondary {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        margin-top: 12px;
+      }
+      .auth-error {
+        background: rgba(248, 81, 73, 0.1);
+        border: 1px solid rgba(248, 81, 73, 0.3);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--accent-red);
+        margin-bottom: 16px;
+        display: none;
+      }
+      .auth-hint {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-align: center;
+        margin-top: 16px;
+      }
+
+      /* ========== 主界面 (隐藏/显示) ========== */
+      .app-main {
+        display: none;
+      }
+      .app-main.visible {
+        display: block;
+      }
+
+      /* 顶部状态栏 */
+      .status-bar {
+        height: 40px;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 12px;
+        font-size: 12px;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent-red);
+        transition: background 0.3s;
+      }
+      .status-dot.connected {
+        background: var(--accent-green);
+      }
+      .status-dot.ws-connected {
+        background: var(--accent-green);
+        box-shadow: 0 0 6px var(--accent-green);
+      }
+      .status-label {
+        color: var(--text-secondary);
+      }
+      .status-sep {
+        width: 1px;
+        height: 16px;
+        background: var(--border);
+      }
+      .status-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .btn-lock {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        padding: 4px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+      }
+      .btn-lock:hover {
+        border-color: var(--accent-red);
+        color: var(--accent-red);
+      }
+
+      /* 主布局 - 采用双栏+底部布局 */
+      .main-layout {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        grid-template-rows: 1fr 280px;
+        grid-template-areas:
+          "workbench chart"
+          "workbench activity";
+        height: calc(100vh - 40px);
+        gap: 1px;
+        background: var(--border);
+      }
+
+      .area-workbench {
+        grid-area: workbench;
+        background: var(--bg-secondary);
+      }
+      .area-chart {
+        grid-area: chart;
+        background: var(--bg-secondary);
+      }
+      .area-activity {
+        grid-area: activity;
+        background: var(--bg-secondary);
+      }
+
+      /* 面板 */
+      .panel {
+        padding: 12px;
+        overflow-y: auto;
+        height: 100%;
+      }
+      .panel-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* 交易面板压缩 */
+      .area-workbench .price-display {
+        padding: 10px 0;
+        margin-bottom: 8px;
+      }
+      .area-workbench .price-value {
+        font-size: 24px;
+      }
+      .area-workbench .order-price-wrap {
+        margin-bottom: 10px;
+      }
+      .area-workbench .price-input {
+        padding: 6px;
+        font-size: 16px;
+      }
+      .area-workbench .direction-tabs {
+        margin-bottom: 10px;
+        gap: 6px;
+      }
+      .area-workbench .dir-tab {
+        padding: 8px 4px;
+        font-size: 13px;
+      }
+      .area-workbench .tier-row {
+        margin-bottom: 10px;
+      }
+      .area-workbench .tier-btn {
+        padding: 6px 2px;
+      }
+      .area-workbench .leverage-row {
+        margin-bottom: 12px;
+        padding: 6px 10px;
+      }
+      .area-workbench .account-preview {
+        padding: 6px 8px;
+        margin-bottom: 8px;
+        font-size: 11px;
+      }
+      .area-workbench .order-btn {
+        padding: 10px;
+        font-size: 14px;
+      }
+      .area-workbench .divider {
+        margin: 10px 0;
+      }
+
+      /* 币种选择 */
+      .symbol-input-wrap {
+        position: relative;
+        margin-bottom: 16px;
+      }
+      .symbol-input {
+        width: 100%;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .symbol-input:focus {
+        border-color: var(--accent-blue);
+        outline: none;
+      }
+      .symbol-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 0 0 8px 8px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 100;
+        display: none;
+      }
+      .symbol-dropdown.visible {
+        display: block;
+      }
+      .symbol-option {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .symbol-option:hover {
+        background: var(--bg-secondary);
+      }
+      .symbol-option .fav-count {
+        color: var(--text-secondary);
+        font-size: 11px;
+      }
+
+      /* 价格显示 */
+      .price-display {
+        text-align: center;
+        padding: 20px 16px;
+        margin-bottom: 16px;
+        background: var(--bg-tertiary);
+        border-radius: 10px;
+        border: 1px solid var(--border);
+      }
+      .price-symbol {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+      }
+      .price-value {
+        font-size: 40px;
+        font-weight: 700;
+        font-family: "JetBrains Mono", "Cascadia Code", monospace;
+        transition: color 0.2s;
+      }
+      .price-value.up {
+        color: var(--accent-green);
+      }
+      .price-value.down {
+        color: var(--accent-red);
+      }
+      .price-value.neutral {
+        color: var(--text-primary);
+      }
+
+      /* 下单价格控制 */
+      .order-price-wrap {
+        margin-bottom: 20px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .order-price-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .order-price-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .mode-toggle {
+        display: flex;
+        background: var(--bg-primary);
+        padding: 2px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .mode-btn {
+        padding: 4px 10px;
+        font-size: 11px;
+        border-radius: 4px;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+      }
+      .mode-btn.active {
+        background: var(--accent-blue);
+        color: #fff;
+      }
+      .price-input-group {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .price-input {
+        flex: 1;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 18px;
+        font-family: "JetBrains Mono", monospace;
+        text-align: center;
+        width: 100%;
+      }
+      .price-input:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .price-step-btn {
+        width: 32px;
+        height: 32px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text-primary);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .price-step-btn:hover:not(:disabled) {
+        border-color: var(--accent-blue);
+      }
+
+      /* 深度面板 (紧排) */
+      .depth-panel {
+        height: auto;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-secondary);
+        padding: 4px;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .depth-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+        padding: 0 4px;
+      }
+      .depth-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 2px 4px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 0.1s;
+        font-size: 11px;
+        position: relative;
+        overflow: hidden;
+        height: 18px;
+      }
+      .depth-row:hover {
+        background: var(--bg-primary);
+      }
+      .depth-row.ask .px {
+        color: var(--accent-red);
+      }
+      .depth-row.bid .px {
+        color: var(--accent-green);
+      }
+      .depth-row .sz {
+        color: var(--text-primary);
+        z-index: 1;
+      }
+      .depth-row .px {
+        z-index: 1;
+        font-weight: 600;
+      }
+      .depth-bg {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        opacity: 0.15;
+        transition: width 0.3s;
+      }
+      .depth-row.ask .depth-bg {
+        background: var(--accent-red);
+      }
+      .depth-row.bid .depth-bg {
+        background: var(--accent-green);
+      }
+
+      /* 方向选择 */
+      .direction-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      .dir-tab {
+        flex: 1;
+        padding: 12px 8px;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 14px;
+        background: var(--bg-tertiary);
+        transition: all 0.15s;
+        user-select: none;
+      }
+      .dir-tab.long.active {
+        background: rgba(63, 185, 80, 0.12);
+        border-color: var(--accent-green);
+        color: var(--accent-green);
+      }
+      .dir-tab.short.active {
+        background: rgba(248, 81, 73, 0.12);
+        border-color: var(--accent-red);
+        color: var(--accent-red);
+      }
+
+      /* 仓位档位 */
+      .tier-row {
+        margin-bottom: 16px;
+      }
+      .tier-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+      }
+      .tier-buttons {
+        display: flex;
+        gap: 6px;
+      }
+      .tier-btn {
+        flex: 1;
+        padding: 8px 4px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 11px;
+        text-align: center;
+        transition: all 0.15s;
+      }
+      .tier-btn.active {
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+        background: rgba(88, 166, 255, 0.08);
+      }
+
+      /* 杠杆 */
+      .leverage-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding: 10px 12px;
+        background: var(--bg-tertiary);
+        border-radius: 8px;
+      }
+      .leverage-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+      .leverage-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .lever-btn {
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .lever-btn:hover {
+        border-color: var(--accent-blue);
+      }
+      .lever-value {
+        font-size: 20px;
+        font-weight: 700;
+        min-width: 28px;
+        text-align: center;
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* 账户预览 */
+      .account-preview {
+        background: var(--bg-tertiary);
+        border: 1px dashed var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+        line-height: 1.6;
+      }
+      .account-preview span {
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+
+      /* 下单按钮 */
+      .order-btn {
+        width: 100%;
+        padding: 14px;
+        border: none;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        margin-bottom: 8px;
+        transition: all 0.15s;
+        letter-spacing: 0.5px;
+      }
+      .order-btn:hover {
+        filter: brightness(1.1);
+        transform: translateY(-1px);
+      }
+      .order-btn:active {
+        transform: translateY(0);
+      }
+      .order-btn.long {
+        background: var(--accent-green);
+        color: #fff;
+      }
+      .order-btn.short {
+        background: var(--accent-red);
+        color: #fff;
+      }
+      .order-btn.close-all {
+        background: var(--accent-yellow);
+        color: #000;
+        margin-top: 16px;
+        font-size: 14px;
+      }
+      .order-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+        filter: none;
+      }
+      .hotkey-hint {
+        font-size: 11px;
+        opacity: 0.6;
+      }
+
+      /* 分隔线 */
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 16px 0;
+      }
+
+      /* 中间图表区 */
+      .chart-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+      }
+      .chart-placeholder {
+        text-align: center;
+      }
+      .chart-placeholder .icon {
+        font-size: 64px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+      }
+      .chart-placeholder p {
+        font-size: 14px;
+      }
+
+      /* 右侧信息面板 */
+      .info-panel {
+        display: flex;
+        flex-direction: column;
+      }
+      .info-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 8px;
+        flex-shrink: 0;
+      }
+      .info-tab {
+        padding: 6px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: all 0.15s;
+      }
+      .info-tab.active {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+      .info-content {
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      /* 持仓项 */
+      .position-item {
+        padding: 12px;
+        background: var(--bg-tertiary);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border: 1px solid var(--border);
+      }
+      .pos-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      .pos-symbol {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .pos-badge {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .pos-badge.long {
+        background: rgba(63, 185, 80, 0.15);
+        color: var(--accent-green);
+      }
+      .pos-badge.short {
+        background: rgba(248, 81, 73, 0.15);
+        color: var(--accent-red);
+      }
+      .pos-detail {
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.8;
+      }
+      .pos-pnl {
+        font-weight: 700;
+      }
+      .pos-pnl.profit {
+        color: var(--accent-green);
+      }
+      .pos-pnl.loss {
+        color: var(--accent-red);
+      }
+      .empty-state {
+        text-align: center;
+        padding: 40px 16px;
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+      .empty-state .icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+        opacity: 0.5;
+      }
+
+      /* 日志项 */
+      .log-item {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .log-time {
+        color: var(--text-secondary);
+      }
+      .log-action {
+        color: var(--accent-blue);
+        font-weight: 600;
+      }
+      .log-result {
+        margin-left: 4px;
+      }
+      .log-result.success {
+        color: var(--accent-green);
+      }
+      .log-result.fail {
+        color: var(--accent-red);
+      }
+
+      /* Toast */
+      .toast-container {
+        position: fixed;
+        top: 48px;
+        right: 16px;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .toast {
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        animation: toastIn 0.3s ease;
+        max-width: 360px;
+      }
+      .toast.success {
+        border-left: 3px solid var(--accent-green);
+      }
+      .toast.error {
+        border-left: 3px solid var(--accent-red);
+      }
+      .toast.info {
+        border-left: 3px solid var(--accent-blue);
+      }
+      @keyframes toastIn {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* OKX 连接弹窗 */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1500;
+      }
+      .modal-overlay.hidden {
+        display: none;
+      }
+      .modal {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px;
+        width: 420px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+      .modal h2 {
+        font-size: 18px;
+        margin-bottom: 20px;
+      }
+      .modal .form-group {
+        margin-bottom: 14px;
+      }
+      .modal label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      .modal input[type="text"],
+      .modal input[type="password"] {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 13px;
+      }
+      .modal input:focus {
+        border-color: var(--accent-blue);
+        outline: none;
+      }
+      .modal-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 15px;
+        margin-bottom: 18px;
+        cursor: pointer;
+      }
+      .modal-checkbox input[type="checkbox"] {
+        width: 19px;
+        height: 19px;
+        cursor: pointer;
+      }
+      .modal-checkbox label {
+        margin-bottom: 0;
+        cursor: pointer;
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .modal-btn {
+        width: 100%;
+        padding: 11px;
+        background: var(--accent-blue);
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .modal-btn:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ==================== 登录页 ==================== -->
+    <div class="auth-page" id="authPage">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <div class="icon">⚡</div>
+          <h1>OKX 交易助手</h1>
+          <p>本地登录解锁</p>
+        </div>
+        <div
+          id="loadingStatus"
+          style="font-size: 14px; color: var(--text-secondary); margin: 10px 0"
+        >
+          正在初始化...
+        </div>
+        <div class="auth-error" id="authError"></div>
+        <!-- 注册表单 (首次) -->
+        <div class="auth-form" id="registerForm" style="display: none">
+          <div class="form-group">
+            <label>设置本地启动密码</label>
+            <input
+              type="password"
+              id="regPassword"
+              placeholder="至少6位，用于加密 API Key"
+            />
+          </div>
+          <div class="form-group">
+            <label>确认密码</label>
+            <input
+              type="password"
+              id="regPassword2"
+              placeholder="再次输入密码"
+            />
+          </div>
+          <button class="auth-btn primary" onclick="doRegister()">创建</button>
+          <p class="auth-hint">密码仅存储在本地，用于加密你的 API 凭证</p>
+        </div>
+        <!-- 登录表单 -->
+        <div class="auth-form" id="loginForm" style="display: none">
+          <div class="form-group">
+            <label>本地密码</label>
+            <input
+              type="password"
+              id="loginPassword"
+              placeholder="输入启动密码"
+              onkeydown="if (event.key === 'Enter') doLogin();"
+            />
+          </div>
+          <button class="auth-btn primary" onclick="doLogin()">解锁</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== OKX 连接弹窗 ==================== -->
+    <div class="modal-overlay hidden" id="connectModal">
+      <div class="modal">
+        <h2>🔗 连接 OKX</h2>
+        <div class="form-group">
+          <label>API 密钥 (API Key)</label>
+          <input type="text" id="apiKey" placeholder="请输入 OKX API Key" />
+        </div>
+        <div class="form-group">
+          <label>私钥 (Secret Key)</label>
+          <input
+            type="password"
+            id="apiSecret"
+            placeholder="请输入 OKX Secret Key"
+          />
+        </div>
+        <div class="form-group">
+          <label>确认密码/口令 (Passphrase)</label>
+          <input
+            type="password"
+            id="apiPassphrase"
+            placeholder="请输入 OKX Passphrase"
+          />
+        </div>
+        <div class="modal-checkbox">
+          <input type="checkbox" id="apiDemo" />
+          <label for="apiDemo">模拟盘</label>
+        </div>
+        <button class="modal-btn" onclick="doConnect()">连接</button>
+      </div>
+    </div>
+
+    <!-- ==================== 主界面 ==================== -->
+    <div class="app-main" id="appMain">
+      <!-- 顶部状态栏 -->
+      <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span class="status-label" id="statusLabel">未连接</span>
+        <div class="status-sep"></div>
+        <div class="status-dot" id="wsDot"></div>
+        <span class="status-label" id="wsLabel">WS 未连接</span>
+        <div class="status-right">
+          <span class="status-label" id="balanceLabel"></span>
+          <button class="btn-lock" onclick="doLock()">🔒 锁定</button>
+        </div>
+      </div>
+
+      <!-- 主布局 -->
+      <div class="main-layout">
+        <!-- 左侧: 交易面板 -->
+        <div class="panel area-workbench">
+          <div class="panel-title">📊 交易工作台</div>
+
+          <!-- 币种选择 -->
+          <div class="symbol-input-wrap">
+            <input
+              type="text"
+              class="symbol-input"
+              id="symbolInput"
+              placeholder="搜索币种... 如 BTC-USDT-SWAP"
+              autocomplete="off"
+            />
+            <div class="symbol-dropdown" id="symbolDropdown"></div>
+          </div>
+
+          <!-- 实时价格 -->
+          <div class="price-display">
+            <div class="price-symbol" id="priceSymbol">选择币种</div>
+            <div class="price-value neutral" id="priceValue">--</div>
+          </div>
+
+          <!-- 下单价格控制 -->
+          <div class="order-price-wrap">
+            <div class="order-price-header">
+              <div class="order-price-label">执行价格</div>
+              <div
+                class="mode-toggle"
+                id="priceModeToggle"
+                onclick="togglePriceMode()"
+              >
+                <div class="mode-btn active" id="modeMarket">市价</div>
+                <div class="mode-btn" id="modeLimit">限价</div>
+              </div>
+            </div>
+            <div class="price-input-group">
+              <button
+                class="price-step-btn"
+                id="btnPriceMinus"
+                onclick="adjustOrderPrice(-1)"
+                disabled
+              >
+                −
+              </button>
+              <input
+                type="number"
+                step="any"
+                class="price-input"
+                id="orderPriceInput"
+                value="0.00"
+                oninput="onPriceInputChange()"
+                disabled
+              />
+              <button
+                class="price-step-btn"
+                id="btnPricePlus"
+                onclick="adjustOrderPrice(1)"
+                disabled
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <!-- 深度面板 (回归工作台内部) -->
+          <div class="depth-panel" style="margin-bottom: 12px; height: auto">
+            <div class="depth-header">
+              <span>价格</span>
+              <span>数量</span>
+            </div>
+            <div id="depthAsks"></div>
+            <div
+              id="depthBids"
+              style="
+                border-top: 1px solid var(--border);
+                margin-top: 4px;
+                padding-top: 4px;
+              "
+            ></div>
+          </div>
+
+          <!-- 方向 -->
+          <div class="direction-tabs">
+            <div class="dir-tab long active" onclick="setDirection('long')">
+              📈 做多
+            </div>
+            <div class="dir-tab short" onclick="setDirection('short')">
+              📉 做空
+            </div>
+          </div>
+
+          <!-- 仓位档位 -->
+          <div class="tier-row">
+            <div class="tier-label">仓位档位</div>
+            <div class="tier-buttons">
+              <div
+                class="tier-btn active"
+                data-tier="first"
+                onclick="setTier('first')"
+              >
+                首仓 50%
+              </div>
+              <div class="tier-btn" data-tier="add1" onclick="setTier('add1')">
+                加仓① 25%
+              </div>
+              <div class="tier-btn" data-tier="add2" onclick="setTier('add2')">
+                加仓② 25%
+              </div>
+            </div>
+          </div>
+
+          <!-- 杠杆 -->
+          <div class="leverage-row">
+            <span class="leverage-label">杠杆倍数</span>
+            <div class="leverage-control">
+              <button class="lever-btn" onclick="adjustLeverage(-1)">−</button>
+              <span class="lever-value" id="leverageValue">3</span>
+              <span style="font-size: 13px; color: var(--text-secondary)"
+                >x</span
+              >
+              <button class="lever-btn" onclick="adjustLeverage(1)">+</button>
+            </div>
+          </div>
+
+          <!-- 账户预览 (新增：显示计算基数) -->
+          <div class="account-preview" id="accountPreview">
+            可用余额: <span id="valAvail">--</span> USDT <br />
+            当前档位预估数量: <span id="valQty">--</span> 张
+          </div>
+
+          <!-- 下单按钮 -->
+          <button class="order-btn long" id="btnOrder" onclick="placeOrder()">
+            一键做多
+            <span class="hotkey-hint">[F1]</span>
+          </button>
+
+          <div class="divider"></div>
+
+          <!-- 一键全平 -->
+          <button class="order-btn close-all" onclick="closeAll()">
+            ⚠️ 一键全平
+            <span class="hotkey-hint">[F3]</span>
+          </button>
+        </div>
+
+        <!-- 右上: 图表区 -->
+        <div class="panel area-chart" id="chartContainer">
+          <div class="chart-placeholder">
+            <div class="icon">📈</div>
+            <p>K 线图表区域</p>
+          </div>
+        </div>
+
+        <!-- 下方: 持仓/挂单/日志区域 -->
+        <div class="panel area-activity info-panel">
+          <div class="info-tabs">
+            <div class="info-tab active" onclick="switchTab('positions')">
+              持仓
+            </div>
+            <div class="info-tab" onclick="switchTab('orders')">挂单</div>
+            <div class="info-tab" onclick="switchTab('logs')">日志</div>
+          </div>
+          <div class="info-content">
+            <div id="tabPositions"></div>
+            <div id="tabOrders" style="display: none"></div>
+            <div id="tabLogs" style="display: none"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+      // ============================================================
+      // 状态
+      // ============================================================
+      const S = {
+        direction: "long",
+        tier: "first",
+        leverage: 3,
+        symbol: "",
+        price: 0,
+        prevPrice: 0,
+        orderPrice: 0,
+        priceMode: "market", // market 或 limit
+        connected: false,
+        wsConnected: false,
+        maxLeverLong: 3,
+        maxLeverShort: 2,
+        balance: 0,
+        calcQty: 1,
+      };
+      let ws = null;
+
+      // ============================================================
+      // 初始化
+      // ============================================================
+      async function init() {
+        try {
+          const resp = await api("/api/session");
+          document.getElementById("loadingStatus").style.display = "none";
+          if (resp.first_run) {
+            show("registerForm");
+            hide("loginForm");
+          } else if (!resp.unlocked) {
+            hide("registerForm");
+            show("loginForm");
+            setTimeout(
+              () => document.getElementById("loginPassword").focus(),
+              100,
+            );
+          } else {
+            enterApp(resp.connected, resp.ws_connected);
+          }
+        } catch (e) {
+          document.getElementById("loadingStatus").textContent =
+            "后端服务未启动或连接失败，请检查终端日志";
+          document.getElementById("loadingStatus").style.color =
+            "var(--accent-red)";
+          console.error("Init failed:", e);
+        }
+      }
+
+      // ============================================================
+      // 登录/注册
+      // ============================================================
+      async function doRegister() {
+        const pw = document.getElementById("regPassword").value;
+        const pw2 = document.getElementById("regPassword2").value;
+        if (pw !== pw2) return showAuthError("两次密码不一致");
+        if (pw.length < 6) return showAuthError("密码至少6位");
+        const resp = await api("/api/session/register", "POST", {
+          password: pw,
+        });
+        if (resp.error) return showAuthError(resp.error);
+        toast("密码设置成功", "success");
+        enterApp(false, false);
+      }
+
+      async function doLogin() {
+        const pw = document.getElementById("loginPassword").value;
+        if (!pw) return;
+        const resp = await api("/api/session/login", "POST", { password: pw });
+        if (resp.error) return showAuthError(resp.error);
+        const ac = resp.auto_connect || {};
+        if (ac.status === "ok") {
+          toast("已自动连接 OKX", "success");
+          enterApp(true, true);
+        } else if (ac.status === "fail") {
+          toast("自动连接失败: " + (ac.reason || ""), "error");
+          enterApp(false, false);
+        } else {
+          enterApp(false, false);
+        }
+      }
+
+      function showAuthError(msg) {
+        const el = document.getElementById("authError");
+        el.textContent = msg;
+        el.style.display = "block";
+        setTimeout(() => (el.style.display = "none"), 4000);
+      }
+
+      function enterApp(connected, wsOk) {
+        document.getElementById("authPage").style.display = "none";
+        document.getElementById("appMain").classList.add("visible");
+        S.connected = connected;
+        S.wsConnected = wsOk;
+        updateStatus();
+        if (connected) {
+          connectWS();
+          refreshPositions();
+          setInterval(refreshPositions, 5000);
+          loadFavorites();
+        } else {
+          document.getElementById("connectModal").classList.remove("hidden");
+        }
+      }
+
+      // ============================================================
+      // OKX 连接
+      // ============================================================
+      async function doConnect() {
+        const body = {
+          api_key: document.getElementById("apiKey").value,
+          secret: document.getElementById("apiSecret").value,
+          passphrase: document.getElementById("apiPassphrase").value,
+          is_demo: document.getElementById("apiDemo").checked,
+          save: true,
+        };
+        if (!body.api_key || !body.secret || !body.passphrase) {
+          return toast("请填写完整 API 凭证", "error");
+        }
+        const resp = await api("/api/connect", "POST", body);
+        if (resp.error) return toast(resp.error, "error");
+        document.getElementById("connectModal").classList.add("hidden");
+        S.connected = true;
+        updateStatus();
+        connectWS();
+        refreshPositions();
+        setInterval(refreshPositions, 5000);
+        loadFavorites();
+        toast("OKX 连接成功", "success");
+      }
+
+      // ============================================================
+      // 锁定
+      // ============================================================
+      async function doLock() {
+        await api("/api/session/lock", "POST");
+        if (ws) ws.close();
+        S.connected = false;
+        S.wsConnected = false;
+        document.getElementById("appMain").classList.remove("visible");
+        document.getElementById("authPage").style.display = "";
+        document.getElementById("loginPassword").value = "";
+        show("loginForm");
+        hide("registerForm");
+        setTimeout(() => document.getElementById("loginPassword").focus(), 100);
+      }
+
+      // ============================================================
+      // WebSocket (前端)
+      // ============================================================
+      function connectWS() {
+        if (ws) ws.close();
+        ws = new WebSocket(`ws://${location.host}/ws`);
+        ws.onopen = () => {
+          S.wsConnected = true;
+          updateStatus();
+        };
+        ws.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          console.log("WS Data:", msg); // 调试: 查看是否收到 ticker 推送
+          if (msg.type === "ticker" && msg.symbol === S.symbol) {
+            updatePrice(msg.price);
+          } else if (msg.type === "depth" && msg.symbol === S.symbol) {
+            updateDepth(msg.data);
+          } else if (msg.type === "order") {
+            toast(
+              `订单: ${msg.data?.instId || ""} ${msg.data?.state || ""}`,
+              "info",
+            );
+            refreshPositions();
+          } else if (msg.type === "position") {
+            refreshPositions();
+          }
+        };
+        ws.onclose = () => {
+          S.wsConnected = false;
+          updateStatus();
+          setTimeout(connectWS, 3000);
+        };
+      }
+
+      // ============================================================
+      // 交易操作
+      // ============================================================
+      function setDirection(dir) {
+        S.direction = dir;
+        const max = dir === "long" ? S.maxLeverLong : S.maxLeverShort;
+        S.leverage = Math.min(S.leverage, max);
+        document.getElementById("leverageValue").textContent = S.leverage;
+        document
+          .querySelectorAll(".dir-tab")
+          .forEach((t) => t.classList.remove("active"));
+        document.querySelector(`.dir-tab.${dir}`).classList.add("active");
+        const btn = document.getElementById("btnOrder");
+        if (dir === "long") {
+          btn.className = "order-btn long";
+          btn.innerHTML = '一键做多 <span class="hotkey-hint">[F1]</span>';
+        } else {
+          btn.className = "order-btn short";
+          btn.innerHTML = '一键做空 <span class="hotkey-hint">[F2]</span>';
+        }
+      }
+
+      function setTier(tier) {
+        S.tier = tier;
+        document
+          .querySelectorAll(".tier-btn")
+          .forEach((t) => t.classList.remove("active"));
+        document
+          .querySelector(`.tier-btn[data-tier="${tier}"]`)
+          .classList.add("active");
+      }
+
+      function adjustLeverage(delta) {
+        const max = S.direction === "long" ? S.maxLeverLong : S.maxLeverShort;
+        S.leverage = Math.max(1, Math.min(max, S.leverage + delta));
+        document.getElementById("leverageValue").textContent = S.leverage;
+      }
+
+      async function placeOrder() {
+        if (!S.symbol) return toast("请先选择币种", "error");
+        if (!S.orderPrice) return toast("等待价格数据", "error");
+        if (!S.connected) return toast("未连接 OKX", "error");
+
+        const qty = S.calcQty || 1;
+        const resp = await api("/api/order", "POST", {
+          symbol: S.symbol,
+          direction: S.direction,
+          price: S.orderPrice,
+          order_type: S.priceMode === "market" ? "market" : "limit",
+          quantity: qty,
+          notional: S.orderPrice * qty,
+        });
+        if (resp.error) return toast(resp.error, "error");
+        toast(
+          `✅ 下单成功 (${resp.latency_ms?.toFixed(0) || "?"}ms)`,
+          "success",
+        );
+      }
+
+      async function closeAll() {
+        if (!S.connected) return toast("未连接", "error");
+        if (!confirm("确认一键全平所有持仓？")) return;
+        const resp = await api("/api/close-all", "POST");
+        if (resp.error) return toast(resp.error, "error");
+        toast(`全平完成: ${resp.results?.length || 0} 个持仓`, "success");
+        refreshPositions();
+      }
+
+      // ============================================================
+      // UI 更新
+      // ============================================================
+      function updateStatus() {
+        const dot = document.getElementById("statusDot");
+        const wsDot = document.getElementById("wsDot");
+        dot.className = "status-dot" + (S.connected ? " connected" : "");
+        wsDot.className = "status-dot" + (S.wsConnected ? " ws-connected" : "");
+        document.getElementById("statusLabel").textContent = S.connected
+          ? "已连接"
+          : "未连接";
+        document.getElementById("wsLabel").textContent = S.wsConnected
+          ? "WS 已连接"
+          : "WS 未连接";
+      }
+
+      function updatePrice(price) {
+        if (!price || isNaN(price)) return;
+        S.prevPrice = S.price;
+        S.price = price;
+        const el = document.getElementById("priceValue");
+        if (!el) return;
+
+        el.textContent = price.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+        if (S.prevPrice === 0) {
+          el.className = "price-value neutral";
+        } else {
+          el.className =
+            "price-value " + (price >= S.prevPrice ? "up" : "down");
+        }
+
+        // 如果是市价模式，更新下单价输入框
+        if (S.priceMode === "market") {
+          S.orderPrice = price;
+          const input = document.getElementById("orderPriceInput");
+          if (input) {
+            input.value = price.toFixed(2);
+            // 确保同步更新对象值
+            onPriceInputChange();
+          }
+        }
+      }
+
+      // 价格模式切换
+      function togglePriceMode() {
+        if (S.priceMode === "market") {
+          S.priceMode = "limit";
+          document.getElementById("modeMarket").classList.remove("active");
+          document.getElementById("modeLimit").classList.add("active");
+          document.getElementById("orderPriceInput").disabled = false;
+          document.getElementById("btnPriceMinus").disabled = false;
+          document.getElementById("btnPricePlus").disabled = false;
+        } else {
+          S.priceMode = "market";
+          document.getElementById("modeMarket").classList.add("active");
+          document.getElementById("modeLimit").classList.remove("active");
+          document.getElementById("orderPriceInput").disabled = true;
+          document.getElementById("btnPriceMinus").disabled = true;
+          document.getElementById("btnPricePlus").disabled = true;
+          // 切回市价时立即同步最新价
+          S.orderPrice = S.price;
+          document.getElementById("orderPriceInput").value = S.price.toFixed(2);
+        }
+      }
+
+      // 手动输入价格时
+      function onPriceInputChange() {
+        const val = parseFloat(
+          document.getElementById("orderPriceInput").value,
+        );
+        if (!isNaN(val)) {
+          S.orderPrice = val;
+        }
+      }
+
+      // 步进调整价格
+      function adjustOrderPrice(direction) {
+        let step = 1.0;
+        // 如果价格很小，减小步长
+        if (S.orderPrice < 1) step = 0.01;
+        else if (S.orderPrice < 100) step = 0.1;
+
+        S.orderPrice += direction * step;
+        if (S.orderPrice < 0) S.orderPrice = 0;
+        document.getElementById("orderPriceInput").value = S.orderPrice.toFixed(
+          S.orderPrice < 10 ? 4 : 2,
+        );
+      }
+
+      function updateDepth(data) {
+        const asksContainer = document.getElementById("depthAsks");
+        const bidsContainer = document.getElementById("depthBids");
+        if (!asksContainer || !bidsContainer) return;
+
+        // 处理卖盘 (Asks) - 倒序排列显示
+        const asks = data.asks.slice(0, 5).reverse();
+        const maxAskSz = Math.max(...asks.map((a) => parseFloat(a[1])), 1);
+        asksContainer.innerHTML = asks
+          .map((a) => {
+            const px = parseFloat(a[0]);
+            const sz = parseFloat(a[1]);
+            const width = ((sz / maxAskSz) * 100).toFixed(0);
+            return `
+            <div class="depth-row ask" onclick="selectDepthPrice(${px})">
+              <span class="px">${px}</span>
+              <span class="sz">${sz}</span>
+              <div class="depth-bg" style="width: ${width}%"></div>
+            </div>
+          `;
+          })
+          .join("");
+
+        // 处理买盘 (Bids)
+        const bids = data.bids.slice(0, 5);
+        const maxBidSz = Math.max(...bids.map((b) => parseFloat(b[1])), 1);
+        bidsContainer.innerHTML = bids
+          .map((b) => {
+            const px = parseFloat(b[0]);
+            const sz = parseFloat(b[1]);
+            const width = ((sz / maxBidSz) * 100).toFixed(0);
+            return `
+            <div class="depth-row bid" onclick="selectDepthPrice(${px})">
+              <span class="px">${px}</span>
+              <span class="sz">${sz}</span>
+              <div class="depth-bg" style="width: ${width}%"></div>
+            </div>
+          `;
+          })
+          .join("");
+      }
+
+      function selectDepthPrice(px) {
+        // 切换到限价模式
+        if (S.priceMode === "market") {
+          togglePriceMode();
+        }
+        S.orderPrice = px;
+        const input = document.getElementById("orderPriceInput");
+        input.value = px.toFixed(2);
+        toast(`已选择价格: ${px}`, "info");
+      }
+
+      async function refreshPositions() {
+        const resp = await api("/api/positions");
+        updateBalance(); // 每次刷新持仓时顺便刷下余额
+        const container = document.getElementById("tabPositions");
+        const positions = resp.positions || [];
+        if (!positions.length) {
+          container.innerHTML =
+            '<div class="empty-state"><div class="icon">📭</div>无持仓</div>';
+          return;
+        }
+        container.innerHTML = positions
+          .map(
+            (p) => `
+            <div class="position-item">
+                <div class="pos-header">
+                    <span class="pos-symbol">${p.symbol}</span>
+                    <span class="pos-badge ${p.direction}">${p.direction === "long" ? "多" : "空"} ${p.leverage || ""}x</span>
+                </div>
+                <div class="pos-detail">
+                    数量: <b>${p.quantity}</b> 张 &nbsp;|&nbsp; 均价: <b>${p.avg_price?.toFixed(2)}</b><br>
+                    标记价: ${p.mark_price?.toFixed(2)} &nbsp;|&nbsp;
+                    <span class="pos-pnl ${p.unrealized_pnl >= 0 ? "profit" : "loss"}">
+                        ${p.unrealized_pnl >= 0 ? "+" : ""}${p.unrealized_pnl?.toFixed(2)} USDT
+                    </span>
+                </div>
+            </div>
+        `,
+          )
+          .join("");
+      }
+
+      async function updateBalance() {
+        if (!S.connected) return;
+        const resp = await api("/api/balance");
+        if (resp && resp.code === "0") {
+          const details = resp.data[0]?.details || [];
+          const usdt = details.find((d) => d.ccy === "USDT");
+          if (usdt) {
+            S.balance = parseFloat(usdt.availBal || 0);
+            calculatePlannedQty();
+          }
+        } else if (resp && resp.error) {
+          console.error("Balance update failed:", resp.error);
+        }
+      }
+
+      function calculatePlannedQty() {
+        const valAvailEl = document.getElementById("valAvail");
+        const valQtyEl = document.getElementById("valQty");
+
+        if (S.balance) {
+          valAvailEl.textContent = S.balance.toFixed(2);
+        }
+
+        if (!S.balance || !S.orderPrice || !S.symbol) {
+          if (valQtyEl) valQtyEl.textContent = "--";
+          return;
+        }
+
+        const allocMap = { first: 0.5, add1: 0.25, add2: 0.25 };
+        const alloc = allocMap[S.tier] || 0.5;
+        const contractVal = 10;
+        const totalNotional = S.balance * alloc * S.leverage;
+        S.calcQty = Math.max(1, Math.floor(totalNotional / contractVal));
+
+        if (valQtyEl) valQtyEl.textContent = S.calcQty;
+      }
+
+      async function loadFavorites() {
+        const resp = await api("/api/favorites");
+        const dropdown = document.getElementById("symbolDropdown");
+        dropdown.innerHTML = "";
+        (resp || []).forEach((f) => {
+          const div = document.createElement("div");
+          div.className = "symbol-option";
+          div.innerHTML = `<span>${f.symbol}</span><span class="fav-count">${f.use_count}次</span>`;
+          div.onclick = () => selectSymbol(f.symbol);
+          dropdown.appendChild(div);
+        });
+      }
+
+      function selectSymbol(symbol) {
+        S.symbol = symbol;
+        document.getElementById("symbolInput").value = symbol;
+        document.getElementById("priceSymbol").textContent = symbol;
+        document.getElementById("symbolDropdown").classList.remove("visible");
+
+        // 加载 TradingView K线图
+        loadTradingView(symbol);
+
+        // 订阅价格
+        fetch(`/api/ticker/${symbol}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.data?.[0]?.last)
+              updatePrice(parseFloat(data.data[0].last));
+          });
+      }
+
+      function loadTradingView(symbol) {
+        // 将 OKX 格式 BTC-USDT-SWAP 转换为 TradingView 格式 OKX:BTCUSDT.P
+        const tvSymbol =
+          "OKX:" + symbol.replace("-SWAP", "").replace(/-/g, "") + ".P";
+
+        new TradingView.widget({
+          autosize: true,
+          symbol: tvSymbol,
+          interval: "1",
+          timezone: "Etc/UTC",
+          theme: "dark",
+          style: "1",
+          locale: "zh_CN",
+          toolbar_bg: "#f1f3f6",
+          enable_publishing: false,
+          hide_side_toolbar: false,
+          allow_symbol_change: true,
+          container_id: "chartContainer",
+        });
+      }
+
+      function switchTab(tab) {
+        document
+          .querySelectorAll(".info-tab")
+          .forEach((t) => t.classList.remove("active"));
+        event.target.classList.add("active");
+        ["Positions", "Orders", "Logs"].forEach((t) => {
+          document.getElementById("tab" + t).style.display =
+            t.toLowerCase() === tab ? "" : "none";
+        });
+      }
+
+      // ============================================================
+      // 币种搜索
+      // ============================================================
+      document
+        .getElementById("symbolInput")
+        .addEventListener("input", async (e) => {
+          const q = e.target.value.toUpperCase();
+          const dropdown = document.getElementById("symbolDropdown");
+          if (!q) {
+            dropdown.classList.remove("visible");
+            return;
+          }
+          // 从 favorites 和 instruments 搜索
+          const favs = await api("/api/favorites");
+          const matches = (favs || []).filter((f) => f.symbol.includes(q));
+          if (matches.length) {
+            dropdown.innerHTML = matches
+              .map(
+                (f) =>
+                  `<div class="symbol-option" onclick="selectSymbol('${f.symbol}')">
+                    <span>${f.symbol}</span><span class="fav-count">${f.use_count}次</span>
+                </div>`,
+              )
+              .join("");
+            dropdown.classList.add("visible");
+          } else {
+            dropdown.innerHTML = `<div class="symbol-option" onclick="selectSymbol('${q}-USDT-SWAP')">
+                <span>${q}-USDT-SWAP</span><span class="fav-count">回车确认</span>
+            </div>`;
+            dropdown.classList.add("visible");
+          }
+        });
+
+      document
+        .getElementById("symbolInput")
+        .addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            const v = e.target.value.toUpperCase();
+            if (v) selectSymbol(v.includes("-") ? v : v + "-USDT-SWAP");
+          }
+        });
+
+      document.getElementById("symbolInput").addEventListener("blur", () => {
+        setTimeout(
+          () =>
+            document
+              .getElementById("symbolDropdown")
+              .classList.remove("visible"),
+          200,
+        );
+      });
+
+      // ============================================================
+      // 全局快捷键
+      // ============================================================
+      document.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+          return;
+        if (e.key === "F1") {
+          e.preventDefault();
+          setDirection("long");
+          placeOrder();
+        }
+        if (e.key === "F2") {
+          e.preventDefault();
+          setDirection("short");
+          placeOrder();
+        }
+        if (e.key === "F3") {
+          e.preventDefault();
+          closeAll();
+        }
+      });
+
+      // ============================================================
+      // 工具
+      // ============================================================
+      async function api(path, method = "GET", body = null) {
+        const opts = {
+          method,
+          headers: { "Content-Type": "application/json" },
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const resp = await fetch(path, opts);
+        return resp.json();
+      }
+
+      function toast(msg, type = "info") {
+        const container = document.getElementById("toastContainer");
+        const el = document.createElement("div");
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+      }
+
+      function show(id) {
+        document.getElementById(id).style.display = "";
+      }
+      function hide(id) {
+        document.getElementById(id).style.display = "none";
+      }
+
+      init();
+    </script>
+  </body>
+</html>

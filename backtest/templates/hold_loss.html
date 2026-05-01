@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% set active = "hold_loss" %}
+{% block title %}扛单分析 - OKX 回测系统{% endblock %}
+
+{% block content %}
+<div class="stats-grid" id="overview-cards"></div>
+
+<div class="card">
+    <h2>🔍 扛单 vs 非扛单对比</h2>
+    <div class="stats-grid" id="comparison-cards"></div>
+</div>
+
+<div class="two-col">
+    <div class="card">
+        <h2>📊 扛单严重程度分布</h2>
+        <div class="chart-container small" id="severity-chart"></div>
+    </div>
+    <div class="card">
+        <h2>📉 最大浮亏 vs 最终盈亏 (散点图)</h2>
+        <div class="chart-container small" id="scatter-chart"></div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>🪙 币种扛单统计</h2>
+    <div class="table-scroll">
+        <table id="symbol-table">
+            <thead><tr><th>币种</th><th>亏损笔数</th><th>平均最大浮亏率</th><th>最大浮亏率</th><th>超止损线</th><th>总亏损额</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadData() {
+    const data = await fetch('/api/hold-loss').then(r => r.json());
+
+    if (data.error) {
+        document.getElementById('overview-cards').innerHTML = `<div class="stat-card"><div class="value">${data.error}</div></div>`;
+        return;
+    }
+
+    // 概览
+    document.getElementById('overview-cards').innerHTML = `
+        <div class="stat-card"><div class="label">总亏损笔数</div><div class="value negative">${data.total_loss_trades}</div></div>
+        <div class="stat-card"><div class="label">平均最大浮亏率</div><div class="value negative">${data.avg_max_floating_loss_rate_pct}</div></div>
+        <div class="stat-card"><div class="label">平均最大浮亏</div><div class="value negative">${data.avg_max_floating_loss.toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">超止损线比例</div><div class="value negative">${data.exceeded_stoploss_ratio_pct}</div></div>
+        <div class="stat-card"><div class="label">超止损线笔数</div><div class="value negative">${data.exceeded_stoploss_count}</div></div>
+    `;
+
+    // 对比
+    const comp = data.comparison;
+    document.getElementById('comparison-cards').innerHTML = `
+        <div class="stat-card"><div class="label">扛单笔数</div><div class="value negative">${comp.holding.count}</div><div class="sub">平均亏损: ${comp.holding.avg_final_loss.toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">扛单平均浮亏率</div><div class="value negative">${(comp.holding.avg_max_floating_loss_rate*100).toFixed(2)}%</div></div>
+        <div class="stat-card"><div class="label">非扛单笔数</div><div class="value positive">${comp.no_holding.count}</div><div class="sub">平均亏损: ${comp.no_holding.avg_final_loss.toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">非扛单平均浮亏率</div><div class="value positive">${(comp.no_holding.avg_max_floating_loss_rate*100).toFixed(2)}%</div></div>
+    `;
+
+    // 严重程度分布
+    const sev = data.severity_distribution;
+    const sevChart = echarts.init(document.getElementById('severity-chart'));
+    sevChart.setOption({
+        tooltip: { trigger: 'item', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+        series: [{
+            type: 'pie', radius: ['40%', '70%'],
+            data: Object.entries(sev).map(([k, v]) => ({ name: k, value: v })),
+            label: { color: '#c9d1d9' },
+            itemStyle: { borderColor: '#161b22', borderWidth: 2 },
+        }],
+    });
+    window.addEventListener('resize', () => sevChart.resize());
+
+    // 散点图
+    const scatter = data.scatter_data;
+    if (scatter && scatter.length > 0) {
+        const scChart = echarts.init(document.getElementById('scatter-chart'));
+        const exceedPts = scatter.filter(d => d.exceeded_stoploss).map(d => [d.max_floating_loss_rate * 100, d.final_pnl]);
+        const normalPts = scatter.filter(d => !d.exceeded_stoploss).map(d => [d.max_floating_loss_rate * 100, d.final_pnl]);
+        scChart.setOption({
+            tooltip: { trigger: 'item', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+            grid: { left: 60, right: 20, top: 20, bottom: 40 },
+            xAxis: { name: '最大浮亏率(%)', nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
+            yAxis: { name: '最终盈亏', nameTextStyle: { color: '#8b949e' }, axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
+            series: [
+                { type: 'scatter', data: normalPts, itemStyle: { color: '#3fb950' }, name: '正常', symbolSize: 6 },
+                { type: 'scatter', data: exceedPts, itemStyle: { color: '#f85149' }, name: '超止损线', symbolSize: 6 },
+            ],
+        });
+        window.addEventListener('resize', () => scChart.resize());
+    }
+
+    // 币种表格
+    const tbody = document.querySelector('#symbol-table tbody');
+    tbody.innerHTML = data.symbol_holding_stats.map(r => `<tr>
+        <td>${r.symbol}</td><td>${r.loss_count}</td>
+        <td class="negative">${(r.avg_max_floating_loss_rate*100).toFixed(2)}%</td>
+        <td class="negative">${(r.max_max_floating_loss_rate*100).toFixed(2)}%</td>
+        <td>${r.exceeded_count}</td>
+        <td class="negative">${r.total_loss_amount.toFixed(2)}</td>
+    </tr>`).join('');
+}
+loadData();
+</script>
+{% endblock %}
