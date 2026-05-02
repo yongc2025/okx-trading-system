@@ -143,8 +143,11 @@ async def api_position():
 @app.post("/api/scan")
 async def api_scan(threshold: float = 0.10):
     """触发扫描"""
-    result = scan_all_symbols(data_dir=PKL_DATA_DIR, threshold=threshold)
-    return JSONResponse(result)
+    try:
+        result = scan_all_symbols(data_dir=PKL_DATA_DIR, threshold=threshold)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": f"扫描失败: {e}"})
 
 
 @app.get("/api/scan/results")
@@ -182,6 +185,21 @@ async def api_scan_export(direction: str = None, min_pct: float = None):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=extreme_scan_results.csv"},
     )
+
+
+@app.post("/api/scan/clear")
+async def api_scan_clear():
+    """清空所有扫描结果"""
+    try:
+        from backtest.data.schema import get_connection, TABLE_SCAN_RESULTS
+        conn = get_connection()
+        cur = conn.execute(f"DELETE FROM {TABLE_SCAN_RESULTS}")
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        return JSONResponse({"ok": True, "deleted": deleted})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
 
 
 # ===== 新增 API：OKX 连接测试 =====

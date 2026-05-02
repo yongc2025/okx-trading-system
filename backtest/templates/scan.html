@@ -10,14 +10,19 @@
     </p>
     <div class="filters">
         <label style="color:#8b949e;">涨跌幅阈值:</label>
-        <select id="threshold-select">
+        <select id="threshold-select" onchange="toggleCustomThreshold()">
+            <option value="0.03">3%</option>
             <option value="0.05">5%</option>
             <option value="0.10" selected>10%</option>
             <option value="0.15">15%</option>
             <option value="0.20">20%</option>
+            <option value="custom">自定义</option>
         </select>
+        <input id="threshold-custom" type="number" min="0.01" max="1" step="0.01" value="0.10"
+            placeholder="如 0.08" style="display:none;width:100px;padding:6px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#c9d1d9;font-size:14px;">
         <button class="btn btn-primary" id="scan-btn" onclick="startScan()">🔍 开始扫描</button>
         <button class="btn" onclick="loadSummary()">📊 刷新摘要</button>
+        <button class="btn btn-danger" onclick="clearScanData()">🗑️ 清空数据</button>
         <span id="scan-status" style="color:#8b949e;font-size:14px;"></span>
     </div>
 </div>
@@ -98,14 +103,28 @@
 <script>
 let currentLimit = 100;
 
+function getThreshold() {
+    const sel = document.getElementById('threshold-select').value;
+    if (sel === 'custom') {
+        const v = parseFloat(document.getElementById('threshold-custom').value);
+        return (v && v > 0 && v <= 1) ? v : 0.10;
+    }
+    return parseFloat(sel);
+}
+
+function toggleCustomThreshold() {
+    const sel = document.getElementById('threshold-select').value;
+    document.getElementById('threshold-custom').style.display = sel === 'custom' ? 'inline-block' : 'none';
+}
+
 async function startScan() {
     const btn = document.getElementById('scan-btn');
     const status = document.getElementById('scan-status');
-    const threshold = document.getElementById('threshold-select').value;
+    const threshold = getThreshold();
 
     btn.disabled = true;
     btn.textContent = '⏳ 扫描中...';
-    status.textContent = '正在扫描所有币种，请稍候...';
+    status.textContent = `正在扫描（阈值 ${(threshold*100).toFixed(1)}%），请稍候...`;
 
     try {
         const resp = await fetch(`/api/scan?threshold=${threshold}`, { method: 'POST' });
@@ -127,6 +146,24 @@ async function startScan() {
 
     btn.disabled = false;
     btn.textContent = '🔍 开始扫描';
+}
+
+async function clearScanData() {
+    if (!confirm('确定清空所有极端行情扫描数据？此操作不可恢复。')) return;
+    try {
+        const resp = await fetch('/api/scan/clear', { method: 'POST' });
+        const result = await resp.json();
+        if (result.ok) {
+            showToast(`已清空 ${result.deleted} 条扫描记录`);
+            document.getElementById('scan-status').textContent = '✅ 数据已清空';
+            loadSummary();
+            loadResults();
+        } else {
+            showToast(result.error || '清空失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败: ' + e.message, 'error');
+    }
 }
 
 async function loadSummary() {

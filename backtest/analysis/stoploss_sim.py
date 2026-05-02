@@ -5,6 +5,7 @@
 - 对比表格（胜率 / 总盈亏 / 盈亏比）
 - 多线收益曲线对比数据
 """
+import math
 import sqlite3
 from typing import Dict, Any, List
 
@@ -27,7 +28,7 @@ def simulate_stoploss_for_trade(
 
     Args:
         row: 单笔交易记录
-        stoploss_ratio: 止损比例 (如 0.10 表示 10%)
+        stoploss_ratio: 止损比例 (如 0.10 表示 10%)，0 表示实际结果不模拟
 
     Returns:
         模拟后的交易数据
@@ -41,6 +42,16 @@ def simulate_stoploss_for_trade(
         }
 
     original_pnl = float(pnl)
+
+    # ratio=0 表示"实际结果"，直接返回原值，不做任何模拟
+    if stoploss_ratio <= 0:
+        return {
+            'original_pnl': original_pnl,
+            'simulated_pnl': original_pnl,
+            'simulated': False,
+            'pnl_diff': 0,
+        }
+
     entry_cost = float(row.get('entry_cost', 0))
     leverage = int(row.get('leverage', 1))
     direction = row.get('direction', 'long')
@@ -121,7 +132,12 @@ def calc_stoploss_stats(df: pd.DataFrame, stoploss_ratio: float) -> Dict[str, An
 
     avg_win = float(win_trades['simulated_pnl'].mean()) if len(win_trades) > 0 else 0
     avg_loss = float(loss_trades['simulated_pnl'].mean()) if len(loss_trades) > 0 else 0
-    profit_loss_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else float('inf')
+    if avg_loss != 0:
+        profit_loss_ratio = abs(avg_win / avg_loss)
+        if math.isinf(profit_loss_ratio) or math.isnan(profit_loss_ratio):
+            profit_loss_ratio = 9999.99
+    else:
+        profit_loss_ratio = 9999.99  # 无亏损交易时用大数代替 inf
 
     # 被止损截断的交易数
     simulated_count = int(sim_df['simulated'].sum())
@@ -231,6 +247,13 @@ def calc_equity_curves_comparison(
     return curves
 
 
+def _safe_float(v: float, default: float = 0.0) -> float:
+    """将 inf/nan 替换为安全默认值，确保 JSON 可序列化"""
+    if math.isinf(v) or math.isnan(v):
+        return default
+    return v
+
+
 def get_stoploss_analysis(conn: sqlite3.Connection = None) -> Dict[str, Any]:
     """从数据库加载数据并执行止损回测分析"""
     own_conn = conn is None
@@ -245,14 +268,14 @@ def get_stoploss_analysis(conn: sqlite3.Connection = None) -> Dict[str, Any]:
     comparison = calc_stoploss_comparison(df)
     curves = calc_equity_curves_comparison(df)
 
-    # 序列化曲线数据
+    # 序列化曲线数据（过滤 inf/nan）
     curves_data = {}
     for label, curve_df in curves.items():
         curves_data[label] = {
             'time': curve_df['time'].tolist(),
-            'equity': [round(float(v), 2) for v in curve_df['equity']],
-            'roi': [round(float(v), 4) for v in curve_df['roi']],
-            'cumulative_pnl': [round(float(v), 2) for v in curve_df['cumulative_pnl']],
+            'equity': [round(_safe_float(float(v)), 2) for v in curve_df['equity']],
+            'roi': [round(_safe_float(float(v)), 4) for v in curve_df['roi']],
+            'cumulative_pnl': [round(_safe_float(float(v)), 2) for v in curve_df['cumulative_pnl']],
         }
 
     return {

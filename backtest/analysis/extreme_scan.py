@@ -14,7 +14,7 @@ import pandas as pd
 
 from backtest.config import EXTREME_THRESHOLD, PKL_DATA_DIR
 from backtest.data.loader import load_single_pkl, load_all_pkl, clean_dataframe
-from backtest.data.schema import get_connection, TABLE_SCAN_RESULTS
+from backtest.data.schema import get_connection, TABLE_SCAN_RESULTS, TABLE_KLINE_DATA, TABLE_TRADE_RECORDS
 
 
 def scan_single_symbol(
@@ -84,6 +84,68 @@ def scan_single_symbol(
     return results
 
 
+def _get_order_symbols(conn: sqlite3.Connection) -> set:
+    """从交易记录表获取所有涉及的币种"""
+    try:
+        cur = conn.execute(f"SELECT DISTINCT symbol FROM {TABLE_TRADE_RECORDS}")
+        return {row['symbol'] for row in cur.fetchall()}
+    except Exception:
+        return set()
+
+
+def _load_kline_data(
+    conn: sqlite3.Connection,
+    symbols: set = None,
+    data_dir: Path = None,
+) -> Dict[str, pd.DataFrame]:
+    """
+    加载 K 线数据，优先从数据库读取，其次从 pkl 文件
+
+    Args:
+        conn: 数据库连接（必须传入）
+        symbols: 只加载这些币种的数据，None 表示全部
+        data_dir: pkl 备选目录
+
+    Returns:
+        {symbol: DataFrame}
+    """
+    # 1. 优先从数据库读取
+    try:
+        cur = conn.execute(f"SELECT COUNT(*) as cnt FROM {TABLE_KLINE_DATA}")
+        row = cur.fetchone()
+        db_count = row['cnt'] if row else 0
+    except Exception:
+        db_count = 0
+
+    if db_count > 0:
+        if symbols:
+            placeholders = ','.join(['?'] * len(symbols))
+            df = pd.read_sql(
+                f"SELECT symbol, time, open, high, low, close, volume "
+                f"FROM {TABLE_KLINE_DATA} WHERE symbol IN ({placeholders}) "
+                f"ORDER BY symbol, time",
+                conn, params=list(symbols),
+            )
+        else:
+            df = pd.read_sql(
+                f"SELECT symbol, time, open, high, low, close, volume "
+                f"FROM {TABLE_KLINE_DATA} ORDER BY symbol, time",
+                conn,
+            )
+        result = {}
+        for sym, group in df.groupby('symbol'):
+            result[str(sym)] = group.reset_index(drop=True)
+        if result:
+            return result
+
+    # 2. 回退到 pkl 文件
+    data_dir = data_dir or PKL_DATA_DIR
+    all_data = load_all_pkl(data_dir)
+    if symbols:
+        all_data = {k: v for k, v in all_data.items() if k in symbols}
+    return all_data
+
+
 def scan_all_symbols(
     data_dir: Path = None,
     threshold: float = EXTREME_THRESHOLD,
@@ -108,11 +170,20 @@ def scan_all_symbols(
 
     data_dir = data_dir or PKL_DATA_DIR
 
-    # 加载数据
+    # 获取订单涉及的币种
+    order_symbols = _get_order_symbols(conn)
+
+    # 加载数据（只加载订单涉及的币种）
     try:
-        all_data = load_all_pkl(data_dir)
+        all_data = _load_kline_data(conn, symbols=order_symbols or None, data_dir=data_dir)
     except FileNotFoundError as e:
-        return {"error": str(e)}
+        if own_conn:
+            conn.close()
+        return {"error": f"无 K 线数据: {e}。请先在数据管理页面下载 K 线"}
+    except Exception as e:
+        if own_conn:
+            conn.close()
+        return {"error": f"加载 K 线数据失败: {e}"}
 
     total_symbols = len(all_data)
     total_extreme = 0

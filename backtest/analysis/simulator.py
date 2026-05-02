@@ -302,7 +302,7 @@ class BatchSimulator:
         loss_pnl = [p for p in pnl_values if p < 0]
         avg_win = np.mean(win_pnl) if win_pnl else 0
         avg_loss = np.mean(loss_pnl) if loss_pnl else 0
-        plr = abs(avg_win / avg_loss) if avg_loss != 0 else float('inf')
+        plr = abs(avg_win / avg_loss) if avg_loss != 0 else 9999.99
 
         # 最大回撤
         cum = np.cumsum(pnl_values)

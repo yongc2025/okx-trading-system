@@ -99,12 +99,24 @@ def load_all_pkl(data_dir: Path = None) -> Dict[str, pd.DataFrame]:
 
     all_data: Dict[str, pd.DataFrame] = {}
     for pkl_file in pkl_files:
-        file_data = load_single_pkl(pkl_file)
+        try:
+            file_data = load_single_pkl(pkl_file)
+        except Exception as e:
+            print(f"[loader] 跳过 {pkl_file.name}: {e}")
+            continue
+
         for symbol, df in file_data.items():
             if symbol in all_data:
-                all_data[symbol] = pd.concat([all_data[symbol], df]).drop_duplicates(
-                    subset=['time'] if 'time' in df.columns else None
-                ).sort_values('time').reset_index(drop=True)
+                try:
+                    merged = pd.concat([all_data[symbol], df])
+                    if 'time' in merged.columns:
+                        merged = merged.drop_duplicates(subset=['time'])
+                    else:
+                        merged = merged.drop_duplicates()
+                    all_data[symbol] = merged.sort_values('time' if 'time' in merged.columns else merged.columns[0]).reset_index(drop=True)
+                except Exception:
+                    # 合并失败时保留原有数据
+                    pass
             else:
                 all_data[symbol] = df
 
@@ -226,3 +238,56 @@ def get_kline_info() -> list[dict]:
             return []
     finally:
         conn.close()
+
+
+def load_klines(
+    symbol: str,
+    bar: str = "5m",
+    source: str = "auto",
+    data_dir: Path = None,
+) -> pd.DataFrame:
+    """
+    加载单个币种的 K 线数据
+
+    Args:
+        symbol: 币种名 (如 "BTC-USDT-SWAP")
+        bar: K 线周期 (如 "5m", "1H")
+        source: 数据源 "auto"(优先数据库) / "db" / "pkl"
+        data_dir: pkl 备选目录
+
+    Returns:
+        DataFrame: time, open, high, low, close, volume
+    """
+    # 1. 从数据库读取
+    if source in ("auto", "db"):
+        conn = get_connection()
+        try:
+            df = pd.read_sql(
+                f"SELECT time, open, high, low, close, volume "
+                f"FROM {TABLE_KLINE_DATA} WHERE symbol=? AND bar=? ORDER BY time",
+                conn, params=[symbol, bar],
+            )
+            if not df.empty:
+                df['time'] = pd.to_datetime(df['time'])
+                return df
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+    # 2. 回退到 pkl 文件
+    if source in ("auto", "pkl"):
+        data_dir = data_dir or PKL_DATA_DIR
+        try:
+            all_data = load_all_pkl(data_dir)
+            kline_df = all_data.get(symbol)
+            if kline_df is not None and not kline_df.empty:
+                df = kline_df.copy()
+                if 'time' in df.columns:
+                    df['time'] = pd.to_datetime(df['time'])
+                    df = df.sort_values('time').reset_index(drop=True)
+                return df
+        except Exception:
+            pass
+
+    return pd.DataFrame()

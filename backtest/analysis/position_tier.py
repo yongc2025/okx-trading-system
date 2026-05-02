@@ -4,6 +4,7 @@
 - 加仓次数分布
 - 对比图数据
 """
+import math
 import sqlite3
 from typing import Dict, Any
 
@@ -13,10 +14,31 @@ import pandas as pd
 from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS
 
 
+def _empty_tier_stats(label: str) -> Dict[str, Any]:
+    """空分组的默认统计值，确保前端不会拿到 undefined"""
+    return {
+        "label": label,
+        "total_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": 0,
+        "win_rate_pct": "0.00%",
+        "total_pnl": 0,
+        "avg_pnl": 0,
+        "avg_win": 0,
+        "avg_loss": 0,
+        "profit_loss_ratio": 0,
+        "stoploss_triggered": 0,
+        "stoploss_ratio": 0,
+        "stoploss_ratio_pct": "0.00%",
+        "avg_max_floating_loss_rate": 0,
+    }
+
+
 def _calc_tier_stats(df: pd.DataFrame, label: str) -> Dict[str, Any]:
     """计算单组交易的统计指标"""
     if df.empty:
-        return {"label": label, "total_trades": 0}
+        return _empty_tier_stats(label)
 
     total = len(df)
     wins = int(df['is_win'].sum()) if 'is_win' in df.columns else 0
@@ -32,7 +54,12 @@ def _calc_tier_stats(df: pd.DataFrame, label: str) -> Dict[str, Any]:
 
     avg_win = float(win_trades.mean()) if len(win_trades) > 0 else 0
     avg_loss = float(loss_trades.mean()) if len(loss_trades) > 0 else 0
-    profit_loss_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else float('inf')
+    if avg_loss != 0:
+        profit_loss_ratio = abs(avg_win / avg_loss)
+        if math.isinf(profit_loss_ratio) or math.isnan(profit_loss_ratio):
+            profit_loss_ratio = 0
+    else:
+        profit_loss_ratio = 0
 
     # 止损触发
     stoploss_triggered = int(df['exceeded_stoploss'].sum()) if 'exceeded_stoploss' in df.columns else 0

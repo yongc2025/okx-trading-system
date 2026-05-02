@@ -92,28 +92,33 @@ async function loadData() {
     // 对比卡片
     const comp = data.comparison;
     const imp = comp.improvement;
+    const fp = comp.first_position;
+    const aa = comp.after_add;
+    const fmtPct = (v) => v != null ? v : '0.00%';
+    const fmtNum = (v) => v != null ? v : 0;
+    const fmtRatio = (v) => v != null ? v : 0;
     document.getElementById('comparison-cards').innerHTML = `
         <div class="stat-card">
             <div class="label">首仓胜率</div>
-            <div class="value neutral">${comp.first_position.win_rate_pct}</div>
-            <div class="sub">平均盈亏: ${(comp.first_position.avg_pnl||0).toFixed(2)}</div>
+            <div class="value neutral">${fmtPct(fp.win_rate_pct)}</div>
+            <div class="sub">平均盈亏: ${fmtNum(fp.avg_pnl).toFixed(2)}</div>
         </div>
         <div class="stat-card">
             <div class="label">加仓后整体胜率</div>
-            <div class="value neutral">${comp.after_add.win_rate_pct}</div>
-            <div class="sub">平均盈亏: ${(comp.after_add.avg_pnl||0).toFixed(2)}</div>
+            <div class="value neutral">${aa.total_trades > 0 ? fmtPct(aa.win_rate_pct) : '无加仓数据'}</div>
+            <div class="sub">平均盈亏: ${fmtNum(aa.avg_pnl).toFixed(2)}</div>
         </div>
         <div class="stat-card">
             <div class="label">胜率变化</div>
-            <div class="value ${imp.win_rate_diff>=0?'positive':'negative'}">${imp.win_rate_diff>=0?'+':''}${(imp.win_rate_diff*100).toFixed(2)}%</div>
+            <div class="value ${(imp.win_rate_diff||0)>=0?'positive':'negative'}">${(imp.win_rate_diff||0)>=0?'+':''}${((imp.win_rate_diff||0)*100).toFixed(2)}%</div>
         </div>
         <div class="stat-card">
             <div class="label">平均盈亏变化</div>
-            <div class="value ${imp.avg_pnl_diff>=0?'positive':'negative'}">${imp.avg_pnl_diff>=0?'+':''}${imp.avg_pnl_diff.toFixed(2)}</div>
+            <div class="value ${(imp.avg_pnl_diff||0)>=0?'positive':'negative'}">${(imp.avg_pnl_diff||0)>=0?'+':''}${(imp.avg_pnl_diff||0).toFixed(2)}</div>
         </div>
         <div class="stat-card">
             <div class="label">盈亏比变化</div>
-            <div class="value ${imp.profit_loss_ratio_diff>=0?'positive':'negative'}">${imp.profit_loss_ratio_diff>=0?'+':''}${imp.profit_loss_ratio_diff.toFixed(2)}</div>
+            <div class="value ${(imp.profit_loss_ratio_diff||0)>=0?'positive':'negative'}">${(imp.profit_loss_ratio_diff||0)>=0?'+':''}${(imp.profit_loss_ratio_diff||0).toFixed(2)}</div>
         </div>
     `;
 
@@ -127,9 +132,9 @@ async function loadData() {
         xAxis: { type: 'category', data: tierData.map(d => d.label), axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}},
         yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
         series: [
-            { name: '胜率(%)', type: 'bar', data: tierData.map(d => (d.win_rate*100).toFixed(1)), itemStyle: { color: '#3fb950' }},
-            { name: '盈亏比', type: 'bar', data: tierData.map(d => d.profit_loss_ratio), itemStyle: { color: '#58a6ff' }},
-            { name: '止损触发率(%)', type: 'bar', data: tierData.map(d => (d.stoploss_ratio*100).toFixed(1)), itemStyle: { color: '#f85149' }},
+            { name: '胜率(%)', type: 'bar', data: tierData.map(d => ((d.win_rate||0)*100).toFixed(1)), itemStyle: { color: '#3fb950' }},
+            { name: '盈亏比', type: 'bar', data: tierData.map(d => d.profit_loss_ratio || 0), itemStyle: { color: '#58a6ff' }},
+            { name: '止损触发率(%)', type: 'bar', data: tierData.map(d => ((d.stoploss_ratio||0)*100).toFixed(1)), itemStyle: { color: '#f85149' }},
         ],
     });
     window.addEventListener('resize', () => barChart.resize());
@@ -152,19 +157,23 @@ async function loadData() {
     // 详细表格
     const allTiers = [data.first_position, data.add1, data.add2, data.after_add, data.total];
     const tbody = document.querySelector('#tier-table tbody');
-    tbody.innerHTML = allTiers.map(r => `<tr>
-        <td><strong>${r.label}</strong></td>
-        <td>${r.total_trades}</td>
-        <td class="positive">${r.wins}</td>
-        <td class="negative">${r.losses}</td>
-        <td class="neutral">${r.win_rate_pct}</td>
-        <td class="${r.total_pnl>=0?'positive':'negative'}">${(r.total_pnl||0).toFixed(2)}</td>
-        <td class="${r.avg_pnl>=0?'positive':'negative'}">${(r.avg_pnl||0).toFixed(2)}</td>
-        <td class="neutral">${r.profit_loss_ratio}</td>
-        <td>${r.stoploss_triggered}</td>
-        <td>${r.stoploss_ratio_pct}</td>
-        <td class="negative">${(r.avg_max_floating_loss_rate*100).toFixed(2)}%</td>
-    </tr>`).join('');
+    tbody.innerHTML = allTiers.map(r => {
+        const n = r.total_trades || 0;
+        const safe = (v, d) => v != null && !isNaN(v) ? v : d;
+        return `<tr>
+            <td><strong>${r.label}</strong></td>
+            <td>${n}</td>
+            <td class="positive">${safe(r.wins, '-')}</td>
+            <td class="negative">${safe(r.losses, '-')}</td>
+            <td class="neutral">${n > 0 ? r.win_rate_pct : '-'}</td>
+            <td class="${(r.total_pnl||0)>=0?'positive':'negative'}">${(r.total_pnl||0).toFixed(2)}</td>
+            <td class="${(r.avg_pnl||0)>=0?'positive':'negative'}">${(r.avg_pnl||0).toFixed(2)}</td>
+            <td class="neutral">${n > 0 ? r.profit_loss_ratio : '-'}</td>
+            <td>${safe(r.stoploss_triggered, '-')}</td>
+            <td>${n > 0 ? r.stoploss_ratio_pct : '-'}</td>
+            <td class="negative">${n > 0 ? (r.avg_max_floating_loss_rate*100).toFixed(2)+'%' : '-'}</td>
+        </tr>`;
+    }).join('');
 
     // 档位分布柱状图
     const tierDist = data.tier_distribution;
