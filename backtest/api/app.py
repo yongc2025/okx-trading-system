@@ -310,6 +310,45 @@ async def api_csv_import(file: UploadFile = File(...)):
         Path(tmp.name).unlink(missing_ok=True)
 
 
+# ===== 新增 API：补算浮亏 =====
+
+@app.post("/api/backfill-float-loss")
+async def api_backfill_float_loss():
+    """
+    补算 max_floating_loss 字段
+    优先从数据库K线补算，没有K线则从pkl文件补算
+    """
+    try:
+        from backtest.data.backfill import backfill_from_db_klines, backfill_from_pkl
+
+        # 先尝试从数据库K线补算
+        result = backfill_from_db_klines()
+
+        # 如果数据库没K线，尝试从pkl补算
+        if result.get("updated", 0) == 0 and "没有K线" in result.get("message", ""):
+            result = backfill_from_pkl()
+
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)})
+
+
+@app.post("/api/clear-trades")
+async def api_clear_trades():
+    """清空所有交易记录及相关数据"""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM {TABLE_TRADE_RECORDS}")
+        cursor.execute("DELETE FROM position_snapshots")
+        trades_deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return JSONResponse({"ok": True, "deleted": trades_deleted})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
 # ===== 新增 API：订单下载与分析 =====
 
 # 全局订单下载器实例

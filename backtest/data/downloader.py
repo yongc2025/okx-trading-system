@@ -614,7 +614,7 @@ class OrderImporter:
     # CSV 必填列
     REQUIRED_COLUMNS = {"symbol", "direction", "entry_time", "entry_price", "exit_time", "exit_price"}
     # CSV 可选列
-    OPTIONAL_COLUMNS = {"leverage", "entry_cost"}
+    OPTIONAL_COLUMNS = {"leverage", "entry_cost", "max_floating_loss", "max_floating_loss_rate"}
     # 合法 direction
     VALID_DIRECTIONS = {"long", "short"}
     # 时间格式
@@ -748,6 +748,21 @@ class OrderImporter:
                         except (ValueError, TypeError):
                             entry_cost = 1000.0
 
+                    # 可选：最大浮亏字段
+                    max_floating_loss = 0.0
+                    if clean_row.get("max_floating_loss"):
+                        try:
+                            max_floating_loss = float(clean_row["max_floating_loss"])
+                        except (ValueError, TypeError):
+                            max_floating_loss = 0.0
+
+                    max_floating_loss_rate = 0.0
+                    if clean_row.get("max_floating_loss_rate"):
+                        try:
+                            max_floating_loss_rate = float(clean_row["max_floating_loss_rate"])
+                        except (ValueError, TypeError):
+                            max_floating_loss_rate = 0.0
+
                     valid_records.append({
                         "symbol": symbol,
                         "direction": direction,
@@ -757,6 +772,8 @@ class OrderImporter:
                         "exit_price": exit_price,
                         "leverage": leverage,
                         "entry_cost": entry_cost,
+                        "max_floating_loss": max_floating_loss,
+                        "max_floating_loss_rate": max_floating_loss_rate,
                     })
 
                 except Exception as e:
@@ -814,6 +831,11 @@ class OrderImporter:
                 is_win = 1 if pnl > 0 else 0
                 is_loss = 1 if pnl < 0 else 0
 
+                # 扛单字段（CSV提供则用CSV值，否则默认0）
+                mfl = rec.get("max_floating_loss", 0.0) or 0.0
+                mflr = rec.get("max_floating_loss_rate", 0.0) or 0.0
+                exceeded = 1 if mflr > 0.10 else 0
+
                 # 生成唯一 trade_id
                 trade_id = f"csv_{rec['symbol']}_{direction}_{rec['entry_time'].strftime('%Y%m%d%H%M')}_{uuid.uuid4().hex[:8]}"
 
@@ -822,8 +844,9 @@ class OrderImporter:
                         f"INSERT OR IGNORE INTO {TABLE_TRADE_RECORDS} "
                         "(trade_id, symbol, direction, leverage, entry_time, entry_price, "
                         "entry_qty, entry_cost, exit_time, exit_price, exit_qty, exit_value, "
-                        "pnl, pnl_rate, roi, is_win, is_loss) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "pnl, pnl_rate, roi, is_win, is_loss, "
+                        "max_floating_loss, max_floating_loss_rate, exceeded_stoploss) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             trade_id,
                             rec["symbol"],
@@ -842,6 +865,9 @@ class OrderImporter:
                             round(roi, 6),
                             is_win,
                             is_loss,
+                            round(mfl, 6),
+                            round(mflr, 6),
+                            exceeded,
                         ),
                     )
                     if cursor.rowcount > 0:
