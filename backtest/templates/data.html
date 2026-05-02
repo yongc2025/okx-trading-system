@@ -1,286 +1,878 @@
-{% extends "base.html" %}
-{% set active = "data" %}
-{% block title %}数据管理 - OKX 回测系统{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% set active = "data" %} {% block title %}数据管理 -
+OKX 回测系统{% endblock %} {% block content %}
 <!-- OKX 连接配置 -->
 <div class="card">
-    <h2>🔗 OKX API 配置</h2>
-    <div class="filters" style="margin-bottom:0">
-        <input type="text" id="cfg-api-key" placeholder="API Key" style="width:240px">
-        <input type="password" id="cfg-secret" placeholder="Secret Key" style="width:240px">
-        <input type="text" id="cfg-passphrase" placeholder="Passphrase" style="width:160px">
-        <label style="color:#8b949e;font-size:13px">
-            <input type="checkbox" id="cfg-demo" checked> 模拟盘
-        </label>
-        <button class="btn btn-primary" onclick="testConnection()">测试连接</button>
-        <span id="conn-status" style="font-size:13px"></span>
+  <h2>🔗 OKX API 配置</h2>
+  <div class="api-form">
+    <div class="api-field">
+      <label>API Key</label>
+      <input
+        type="text"
+        id="cfg-api-key"
+        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      />
     </div>
+    <div class="api-field">
+      <label>Secret Key</label>
+      <input type="password" id="cfg-secret" placeholder="Secret Key" />
+    </div>
+    <div class="api-field short">
+      <label>Passphrase</label>
+      <input type="password" id="cfg-passphrase" placeholder="Passphrase" />
+    </div>
+    <div class="api-field inline">
+      <label><input type="checkbox" id="cfg-demo" checked /> 模拟盘</label>
+    </div>
+    <div class="api-field inline">
+      <button class="btn btn-primary" onclick="testConnection()">
+        测试连接
+      </button>
+      <span id="conn-status"></span>
+    </div>
+  </div>
 </div>
 
 <!-- K 线下载 -->
 <div class="card">
-    <h2>📥 K 线下载</h2>
-    <div class="filters">
-        <label style="color:#8b949e;font-size:13px">币种（逗号分隔）:</label>
-        <input type="text" id="dl-symbols" value="BTC-USDT-SWAP,ETH-USDT-SWAP" style="width:360px">
-        <label style="color:#8b949e;font-size:13px">周期:</label>
-        <select id="dl-bars" multiple size="1" style="min-width:120px;height:32px">
-            <option value="1m">1m</option>
-            <option value="5m" selected>5m</option>
-            <option value="15m">15m</option>
-            <option value="1H">1H</option>
-            <option value="4H">4H</option>
-            <option value="1D">1D</option>
-        </select>
-        <label style="color:#8b949e;font-size:13px">天数:</label>
-        <input type="number" id="dl-days" value="90" min="1" max="365" style="width:80px">
-        <button class="btn btn-primary" id="btn-download" onclick="startDownload()">开始下载</button>
+  <h2>📥 K 线下载</h2>
+
+  <!-- 币种选择：搜索下拉 + 星标订阅 -->
+  <div style="margin-bottom: 16px">
+    <label
+      style="
+        color: #8b949e;
+        font-size: 13px;
+        display: block;
+        margin-bottom: 8px;
+      "
+      >选择币种</label
+    >
+    <div class="symbol-selector-wrap">
+      <div class="symbol-input-row">
+        <input
+          type="text"
+          id="symbol-search"
+          placeholder="搜索币种，如 BTC、ETH..."
+          autocomplete="off"
+        />
+        <div id="symbol-dropdown" class="symbol-dropdown"></div>
+      </div>
+      <div id="symbol-tags" class="symbol-tags"></div>
     </div>
-    <div id="download-progress" style="margin-top:16px;display:none">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-            <span id="dl-status-text" style="color:#8b949e">准备中...</span>
-            <span id="dl-count" style="color:#58a6ff">0/0</span>
-        </div>
-        <div style="background:#21262d;border-radius:4px;height:8px;overflow:hidden">
-            <div id="dl-bar" style="background:#1f6feb;height:100%;width:0%;transition:width 0.3s"></div>
-        </div>
-        <div id="dl-errors" style="margin-top:8px;color:#f85149;font-size:13px"></div>
+  </div>
+
+  <!-- 周期：横向复选框 -->
+  <div style="margin-bottom: 16px">
+    <label
+      style="
+        color: #8b949e;
+        font-size: 13px;
+        display: block;
+        margin-bottom: 8px;
+      "
+      >K 线周期</label
+    >
+    <div style="display: flex; gap: 8px; flex-wrap: wrap" id="bar-checkboxes">
+      <label class="bar-chip"
+        ><input type="checkbox" value="1m" /><span>1m</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="5m" checked /><span>5m</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="15m" /><span>15m</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="30m" /><span>30m</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="1H" /><span>1H</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="4H" /><span>4H</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="1D" /><span>1D</span></label
+      >
+      <label class="bar-chip"
+        ><input type="checkbox" value="1W" /><span>1W</span></label
+      >
     </div>
+  </div>
+
+  <!-- 时间范围 -->
+  <div style="margin-bottom: 16px">
+    <label
+      style="
+        color: #8b949e;
+        font-size: 13px;
+        display: block;
+        margin-bottom: 8px;
+      "
+      >下载时间范围</label
+    >
+    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap">
+      <label class="radio-label">
+        <input
+          type="radio"
+          name="date-mode"
+          value="relative"
+          checked
+          onchange="toggleDateMode()"
+        />
+        最近
+        <input
+          type="number"
+          id="dl-days"
+          value="90"
+          min="1"
+          max="365"
+          class="days-input"
+        />
+        天
+      </label>
+      <label class="radio-label">
+        <input
+          type="radio"
+          name="date-mode"
+          value="custom"
+          onchange="toggleDateMode()"
+        />
+        自定义日期
+      </label>
+      <span id="custom-date-fields" class="date-fields">
+        <input type="date" id="dl-start-date" />
+        <span style="color: #8b949e">至</span>
+        <input type="date" id="dl-end-date" />
+      </span>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-download" onclick="startDownload()">
+    开始下载
+  </button>
+
+  <div id="download-progress" style="margin-top: 16px; display: none">
+    <div
+      style="display: flex; justify-content: space-between; margin-bottom: 8px"
+    >
+      <span id="dl-status-text" style="color: #8b949e">准备中...</span>
+      <span id="dl-count" style="color: #58a6ff">0/0</span>
+    </div>
+    <div
+      style="
+        background: #21262d;
+        border-radius: 4px;
+        height: 8px;
+        overflow: hidden;
+      "
+    >
+      <div
+        id="dl-bar"
+        style="
+          background: #1f6feb;
+          height: 100%;
+          width: 0%;
+          transition: width 0.3s;
+        "
+      ></div>
+    </div>
+    <div
+      id="dl-errors"
+      style="margin-top: 8px; color: #f85149; font-size: 13px"
+    ></div>
+  </div>
 </div>
 
 <div class="two-col">
-    <!-- K 线数据概览 -->
-    <div class="card">
-        <h2>📊 K 线数据概览</h2>
-        <div id="kline-info-loading" class="loading">加载中...</div>
-        <div class="table-scroll" id="kline-info-table" style="display:none">
-            <table>
-                <thead>
-                    <tr><th>币种</th><th>周期</th><th>起始</th><th>截止</th><th>条数</th></tr>
-                </thead>
-                <tbody id="kline-info-body"></tbody>
-            </table>
-        </div>
+  <!-- K 线数据概览 -->
+  <div class="card">
+    <h2>📊 K 线数据概览</h2>
+    <div id="kline-info-loading" class="loading">加载中...</div>
+    <div class="table-scroll" id="kline-info-table" style="display: none">
+      <table>
+        <thead>
+          <tr>
+            <th>币种</th>
+            <th>周期</th>
+            <th>起始</th>
+            <th>截止</th>
+            <th>条数</th>
+          </tr>
+        </thead>
+        <tbody id="kline-info-body"></tbody>
+      </table>
     </div>
+  </div>
 
-    <!-- CSV 导入 -->
-    <div class="card">
-        <h2>📄 CSV 订单导入</h2>
-        <div style="margin-bottom:12px">
-            <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
-        </div>
-        <div style="margin-bottom:12px">
-            <input type="file" id="csv-file" accept=".csv" style="color:#8b949e;font-size:13px">
-            <button class="btn btn-primary" onclick="importCSV()" style="margin-left:8px">导入</button>
-        </div>
-        <div id="csv-result" style="font-size:13px;margin-top:8px"></div>
-
-        <div style="margin-top:20px;border-top:1px solid #30363d;padding-top:16px">
-            <h2 style="font-size:14px;margin-bottom:12px">📋 CSV 格式说明</h2>
-            <div style="font-size:13px;color:#8b949e;line-height:1.8">
-                <p><b>必填列：</b>symbol, direction, entry_time, entry_price, exit_time, exit_price</p>
-                <p><b>可选列：</b>leverage (默认1), entry_cost (默认1000)</p>
-                <p><b>时间格式：</b>YYYY-MM-DD HH:MM</p>
-                <p><b>direction：</b>long / short</p>
-                <p><b>自动计算：</b>pnl, roi, is_win 等指标</p>
-            </div>
-        </div>
+  <!-- CSV 导入 -->
+  <div class="card">
+    <h2>📄 CSV 订单导入</h2>
+    <div style="margin-bottom: 12px">
+      <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
     </div>
+    <div style="margin-bottom: 12px">
+      <input
+        type="file"
+        id="csv-file"
+        accept=".csv"
+        style="color: #8b949e; font-size: 13px"
+      />
+      <button
+        class="btn btn-primary"
+        onclick="importCSV()"
+        style="margin-left: 8px"
+      >
+        导入
+      </button>
+    </div>
+    <div id="csv-result" style="font-size: 13px; margin-top: 8px"></div>
+
+    <div
+      style="margin-top: 20px; border-top: 1px solid #30363d; padding-top: 16px"
+    >
+      <h2 style="font-size: 14px; margin-bottom: 12px">📋 CSV 格式说明</h2>
+      <div style="font-size: 13px; color: #8b949e; line-height: 1.8">
+        <p>
+          <b>必填列：</b>symbol, direction, entry_time, entry_price, exit_time,
+          exit_price
+        </p>
+        <p><b>可选列：</b>leverage (默认1), entry_cost (默认1000)</p>
+        <p><b>时间格式：</b>YYYY-MM-DD HH:MM</p>
+        <p><b>direction：</b>long / short</p>
+        <p><b>自动计算：</b>pnl, roi, is_win 等指标</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 下载状态详情 -->
 <div class="card">
-    <h2>📋 下载状态详情</h2>
-    <div class="table-scroll">
-        <table>
-            <thead>
-                <tr>
-                    <th>币种</th><th>周期</th><th>状态</th><th>已下载</th><th>总数</th>
-                </tr>
-            </thead>
-            <tbody id="progress-body"></tbody>
-        </table>
-    </div>
+  <h2>📋 下载状态详情</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>币种</th>
+          <th>周期</th>
+          <th>状态</th>
+          <th>已下载</th>
+          <th>总数</th>
+        </tr>
+      </thead>
+      <tbody id="progress-body"></tbody>
+    </table>
+  </div>
 </div>
-{% endblock %}
+{% endblock %} {% block scripts %}
+<style>
+  /* ===== API 配置表单 ===== */
+  .api-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .api-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 200px;
+  }
+  .api-field.short {
+    flex: 0 0 200px;
+    min-width: 160px;
+  }
+  .api-field.inline {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding-top: 22px;
+  }
+  .api-field label {
+    font-size: 13px;
+    color: #8b949e;
+  }
+  .api-field.inline label {
+    font-size: 14px;
+  }
+  .api-field input[type="text"],
+  .api-field input[type="password"] {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 14px;
+    height: 36px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .api-field input:focus {
+    border-color: #58a6ff;
+  }
+  #conn-status {
+    font-size: 13px;
+    margin-left: 4px;
+  }
 
-{% block scripts %}
+  /* ===== 币种选择器 ===== */
+  .symbol-selector-wrap {
+    position: relative;
+  }
+  .symbol-input-row {
+    position: relative;
+  }
+  .symbol-input-row input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 14px;
+    height: 36px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .symbol-input-row input:focus {
+    border-color: #58a6ff;
+  }
+
+  .symbol-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 200;
+  }
+  .symbol-dropdown.open {
+    display: block;
+  }
+
+  .symbol-option {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #c9d1d9;
+    transition: background 0.1s;
+  }
+  .symbol-option:hover {
+    background: #21262d;
+  }
+  .symbol-option .star {
+    margin-right: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    filter: grayscale(1);
+    opacity: 0.35;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .symbol-option .star.on {
+    filter: grayscale(0);
+    opacity: 1;
+  }
+  .symbol-option .sym-name {
+    flex: 1;
+  }
+  .symbol-option .sym-badge {
+    font-size: 11px;
+    color: #8b949e;
+    background: #21262d;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+
+  /* 已订阅的标签 */
+  .symbol-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    min-height: 0;
+  }
+  .symbol-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #1c1708;
+    border: 1px solid #d29922;
+    color: #e3b341;
+  }
+  .symbol-tag .star {
+    font-size: 13px;
+  }
+  .symbol-tag .remove {
+    font-size: 14px;
+    color: #8b949e;
+    cursor: pointer;
+    margin-left: 2px;
+    line-height: 1;
+  }
+  .symbol-tag .remove:hover {
+    color: #f85149;
+  }
+
+  /* ===== 周期复选框 ===== */
+  .bar-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    font-size: 14px;
+    color: #8b949e;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .bar-chip:has(input:checked) {
+    border-color: #1f6feb;
+    color: #58a6ff;
+    background: #0c2d6b;
+  }
+  .bar-chip input {
+    display: none;
+  }
+
+  /* ===== 日期/天数 ===== */
+  .radio-label {
+    color: #8b949e;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .days-input {
+    width: 70px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 14px;
+    height: 32px;
+    text-align: center;
+  }
+  .date-fields {
+    display: none;
+    gap: 8px;
+    align-items: center;
+  }
+  .date-fields input[type="date"] {
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 14px;
+    height: 32px;
+  }
+</style>
+
 <script>
-// ===== K 线数据概览
-async function loadKlineInfo() {
+  // ===== 币种管理 =====
+  // 常见 OKX 永续合约（动态扩展）
+  let ALL_SYMBOLS = [
+    "BTC-USDT-SWAP",
+    "ETH-USDT-SWAP",
+    "SOL-USDT-SWAP",
+    "XRP-USDT-SWAP",
+    "DOGE-USDT-SWAP",
+    "ADA-USDT-SWAP",
+    "AVAX-USDT-SWAP",
+    "LINK-USDT-SWAP",
+    "DOT-USDT-SWAP",
+    "MATIC-USDT-SWAP",
+    "UNI-USDT-SWAP",
+    "LTC-USDT-SWAP",
+    "ATOM-USDT-SWAP",
+    "NEAR-USDT-SWAP",
+    "APT-USDT-SWAP",
+    "ARB-USDT-SWAP",
+    "OP-USDT-SWAP",
+    "FIL-USDT-SWAP",
+    "AAVE-USDT-SWAP",
+    "MKR-USDT-SWAP",
+    "TRX-USDT-SWAP",
+    "TON-USDT-SWAP",
+    "PEPE-USDT-SWAP",
+    "SHIB-USDT-SWAP",
+    "WLD-USDT-SWAP",
+    "INJ-USDT-SWAP",
+    "TIA-USDT-SWAP",
+    "SUI-USDT-SWAP",
+    "SEI-USDT-SWAP",
+    "JUP-USDT-SWAP",
+    "ORDI-USDT-SWAP",
+    "1000SATS-USDT-SWAP",
+  ];
+
+  // 已订阅集合
+  const subscribed = new Set(["BTC-USDT-SWAP", "ETH-USDT-SWAP"]);
+
+  // 去重 & 排序
+  function refreshSymbolList() {
+    ALL_SYMBOLS = [...new Set(ALL_SYMBOLS)].sort();
+  }
+
+  // 渲染下拉列表
+  function renderDropdown(filter = "") {
+    const el = document.getElementById("symbol-dropdown");
+    const q = filter.toUpperCase().trim();
+    const filtered = q ? ALL_SYMBOLS.filter((s) => s.includes(q)) : ALL_SYMBOLS;
+
+    if (!filtered.length) {
+      // 允许直接添加自定义币种
+      const custom = filter.trim().toUpperCase();
+      if (custom && !ALL_SYMBOLS.includes(custom)) {
+        const full = custom.endsWith("-USDT-SWAP")
+          ? custom
+          : custom + "-USDT-SWAP";
+        el.innerHTML = `<div class="symbol-option" onclick="addCustomSymbol('${full}')">
+                <span class="star" style="opacity:0.2">⭐</span>
+                <span class="sym-name">添加 "${full}"</span>
+            </div>`;
+      } else {
+        el.innerHTML =
+          '<div style="padding:12px;color:#8b949e;font-size:13px">无匹配结果</div>';
+      }
+      return;
+    }
+
+    el.innerHTML = filtered
+      .map((sym) => {
+        const on = subscribed.has(sym);
+        return `<div class="symbol-option" data-sym="${sym}">
+            <span class="star ${on ? "on" : ""}" onclick="event.stopPropagation();toggleStar('${sym}')">⭐</span>
+            <span class="sym-name" onclick="toggleStar('${sym}')">${sym.replace("-USDT-SWAP", "")}</span>
+            <span class="sym-badge">永续</span>
+        </div>`;
+      })
+      .join("");
+  }
+
+  // 渲染已订阅标签
+  function renderTags() {
+    const el = document.getElementById("symbol-tags");
+    if (subscribed.size === 0) {
+      el.innerHTML =
+        '<span style="font-size:12px;color:#8b949e">未订阅任何币种，搜索并点击 ⭐ 订阅</span>';
+      return;
+    }
+    el.innerHTML = Array.from(subscribed)
+      .map(
+        (sym) =>
+          `<span class="symbol-tag">
+            <span class="star">⭐</span>
+            ${sym.replace("-USDT-SWAP", "")}
+            <span class="remove" onclick="removeStar('${sym}')">✕</span>
+        </span>`,
+      )
+      .join("");
+  }
+
+  function toggleStar(sym) {
+    if (subscribed.has(sym)) {
+      subscribed.delete(sym);
+    } else {
+      subscribed.add(sym);
+    }
+    renderTags();
+    // 刷新下拉（如果开着）
+    const dropdown = document.getElementById("symbol-dropdown");
+    if (dropdown.classList.contains("open")) {
+      renderDropdown(document.getElementById("symbol-search").value);
+    }
+  }
+
+  function removeStar(sym) {
+    subscribed.delete(sym);
+    renderTags();
+    const dropdown = document.getElementById("symbol-dropdown");
+    if (dropdown.classList.contains("open")) {
+      renderDropdown(document.getElementById("symbol-search").value);
+    }
+  }
+
+  function addCustomSymbol(sym) {
+    if (!ALL_SYMBOLS.includes(sym)) {
+      ALL_SYMBOLS.push(sym);
+      refreshSymbolList();
+    }
+    subscribed.add(sym);
+    document.getElementById("symbol-search").value = "";
+    renderTags();
+    closeDropdown();
+  }
+
+  function closeDropdown() {
+    document.getElementById("symbol-dropdown").classList.remove("open");
+  }
+
+  // 搜索输入事件
+  const searchInput = document.getElementById("symbol-search");
+  searchInput.addEventListener("focus", () => {
+    renderDropdown(searchInput.value);
+    document.getElementById("symbol-dropdown").classList.add("open");
+  });
+  searchInput.addEventListener("input", () => {
+    renderDropdown(searchInput.value);
+    document.getElementById("symbol-dropdown").classList.add("open");
+  });
+  // 点击外部关闭
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".symbol-selector-wrap")) closeDropdown();
+  });
+
+  renderTags();
+
+  // ===== 日期模式切换
+  function toggleDateMode() {
+    const mode = document.querySelector(
+      'input[name="date-mode"]:checked',
+    ).value;
+    document.getElementById("custom-date-fields").style.display =
+      mode === "custom" ? "flex" : "none";
+    document.getElementById("dl-days").disabled = mode === "custom";
+  }
+  // 默认日期
+  const now = new Date();
+  document.getElementById("dl-end-date").value = now
+    .toISOString()
+    .split("T")[0];
+  const start90 = new Date(now.getTime() - 90 * 86400000);
+  document.getElementById("dl-start-date").value = start90
+    .toISOString()
+    .split("T")[0];
+
+  // ===== K 线数据概览
+  async function loadKlineInfo() {
     try {
-        const resp = await fetch('/api/kline-info');
-        const data = await resp.json();
-        document.getElementById('kline-info-loading').style.display = 'none';
-        document.getElementById('kline-info-table').style.display = 'block';
-        const tbody = document.getElementById('kline-info-body');
-        if (!data.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
-            return;
-        }
-        tbody.innerHTML = data.map(r => `<tr>
+      const resp = await fetch("/api/kline-info");
+      const data = await resp.json();
+      document.getElementById("kline-info-loading").style.display = "none";
+      document.getElementById("kline-info-table").style.display = "block";
+      const tbody = document.getElementById("kline-info-body");
+      if (!data.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data
+        .map(
+          (r) => `<tr>
             <td>${r.symbol}</td>
             <td><span class="badge badge-blue">${r.bar}</span></td>
-            <td>${(r.first_time||'').substring(0,16)}</td>
-            <td>${(r.last_time||'').substring(0,16)}</td>
+            <td>${(r.first_time || "").substring(0, 16)}</td>
+            <td>${(r.last_time || "").substring(0, 16)}</td>
             <td>${r.count}</td>
-        </tr>`).join('');
-    } catch(e) {
-        document.getElementById('kline-info-loading').textContent = '加载失败: ' + e.message;
+        </tr>`,
+        )
+        .join("");
+    } catch (e) {
+      document.getElementById("kline-info-loading").textContent =
+        "加载失败: " + e.message;
     }
-}
-loadKlineInfo();
+  }
+  loadKlineInfo();
 
-// ===== OKX 连接测试
-async function testConnection() {
-    const el = document.getElementById('conn-status');
-    el.textContent = '测试中...';
-    el.style.color = '#8b949e';
+  // ===== OKX 连接测试
+  async function testConnection() {
+    const el = document.getElementById("conn-status");
+    el.textContent = "测试中...";
+    el.style.color = "#8b949e";
     try {
-        const resp = await fetch('/api/okx/test', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                api_key: document.getElementById('cfg-api-key').value,
-                secret: document.getElementById('cfg-secret').value,
-                passphrase: document.getElementById('cfg-passphrase').value,
-                is_demo: document.getElementById('cfg-demo').checked,
-            }),
-        });
-        const data = await resp.json();
-        if (data.ok) {
-            el.textContent = '✅ 连接成功';
-            el.style.color = '#3fb950';
-        } else {
-            el.textContent = '❌ ' + (data.error || '连接失败');
-            el.style.color = '#f85149';
-        }
-    } catch(e) {
-        el.textContent = '❌ 请求失败';
-        el.style.color = '#f85149';
+      const resp = await fetch("/api/okx/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: document.getElementById("cfg-api-key").value,
+          secret: document.getElementById("cfg-secret").value,
+          passphrase: document.getElementById("cfg-passphrase").value,
+          is_demo: document.getElementById("cfg-demo").checked,
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        el.textContent = "✅ 连接成功";
+        el.style.color = "#3fb950";
+      } else {
+        el.textContent = "❌ " + (data.error || "连接失败");
+        el.style.color = "#f85149";
+      }
+    } catch (e) {
+      el.textContent = "❌ 请求失败";
+      el.style.color = "#f85149";
     }
-}
+  }
 
-// ===== K 线下载
-let pollTimer = null;
+  // ===== K 线下载
+  let pollTimer = null;
 
-async function startDownload() {
-    const btn = document.getElementById('btn-download');
+  async function startDownload() {
+    const btn = document.getElementById("btn-download");
     btn.disabled = true;
-    btn.textContent = '下载中...';
+    btn.textContent = "下载中...";
 
-    const symbols = document.getElementById('dl-symbols').value
-        .split(',').map(s => s.trim()).filter(Boolean);
-    const barsSelect = document.getElementById('dl-bars');
-    const bars = Array.from(barsSelect.selectedOptions).map(o => o.value);
-    const days = parseInt(document.getElementById('dl-days').value) || 90;
+    const symbols = Array.from(subscribed);
+    const barCheckboxes = document.querySelectorAll(
+      "#bar-checkboxes input:checked",
+    );
+    const bars = Array.from(barCheckboxes).map((cb) => cb.value);
 
-    if (!symbols.length || !bars.length) {
-        alert('请填写币种和选择周期');
-        btn.disabled = false;
-        btn.textContent = '开始下载';
-        return;
+    const dateMode = document.querySelector(
+      'input[name="date-mode"]:checked',
+    ).value;
+    const days = parseInt(document.getElementById("dl-days").value) || 90;
+    const start_date =
+      dateMode === "custom"
+        ? document.getElementById("dl-start-date").value
+        : null;
+    const end_date =
+      dateMode === "custom"
+        ? document.getElementById("dl-end-date").value
+        : null;
+
+    if (!symbols.length) {
+      alert("请至少订阅一个币种");
+      btn.disabled = false;
+      btn.textContent = "开始下载";
+      return;
+    }
+    if (!bars.length) {
+      alert("请至少选择一个 K 线周期");
+      btn.disabled = false;
+      btn.textContent = "开始下载";
+      return;
     }
 
-    document.getElementById('download-progress').style.display = 'block';
-    document.getElementById('dl-status-text').textContent = '下载中...';
-    document.getElementById('dl-errors').textContent = '';
+    document.getElementById("download-progress").style.display = "block";
+    document.getElementById("dl-status-text").textContent = "下载中...";
+    document.getElementById("dl-errors").textContent = "";
 
-    // 启动下载
-    fetch('/api/kline/download', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({symbols, bars, days}),
-    }).then(r => r.json()).then(data => {
-        if (data.error) {
-            document.getElementById('dl-errors').textContent = '错误: ' + data.error;
-        }
+    fetch("/api/kline/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols, bars, days, start_date, end_date }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error)
+          document.getElementById("dl-errors").textContent =
+            "错误: " + data.error;
         loadKlineInfo();
-    }).catch(e => {
-        document.getElementById('dl-errors').textContent = '请求失败: ' + e.message;
-    }).finally(() => {
+      })
+      .catch((e) => {
+        document.getElementById("dl-errors").textContent =
+          "请求失败: " + e.message;
+      })
+      .finally(() => {
         btn.disabled = false;
-        btn.textContent = '开始下载';
+        btn.textContent = "开始下载";
         if (pollTimer) clearInterval(pollTimer);
-    });
+      });
 
-    // 轮询进度
     pollTimer = setInterval(async () => {
-        try {
-            const resp = await fetch('/api/kline/progress');
-            const progress = await resp.json();
-            updateProgressTable(progress);
-        } catch(e) {}
+      try {
+        const resp = await fetch("/api/kline/progress");
+        updateProgressTable(await resp.json());
+      } catch (e) {}
     }, 1500);
-}
+  }
 
-function updateProgressTable(progress) {
-    const tbody = document.getElementById('progress-body');
-    let totalTasks = 0, doneTasks = 0;
+  function updateProgressTable(progress) {
+    const tbody = document.getElementById("progress-body");
+    let totalTasks = 0,
+      doneTasks = 0;
     const rows = [];
     for (const [symbol, bars] of Object.entries(progress)) {
-        for (const [bar, info] of Object.entries(bars)) {
-            totalTasks++;
-            if (info.status === 'done') doneTasks++;
-            const statusColor = info.status === 'done' ? '#3fb950' :
-                               info.status === 'error' ? '#f85149' : '#58a6ff';
-            const statusText = info.status === 'done' ? '✅ 完成' :
-                              info.status === 'error' ? '❌ 错误' :
-                              info.status === 'downloading' ? '⏳ 下载中' : '⏸ 等待';
-            rows.push(`<tr>
-                <td>${symbol}</td>
-                <td><span class="badge badge-blue">${bar}</span></td>
-                <td style="color:${statusColor}">${statusText}</td>
-                <td>${info.downloaded}</td>
-                <td>${info.total}</td>
-            </tr>`);
-        }
+      for (const [bar, info] of Object.entries(bars)) {
+        totalTasks++;
+        if (info.status === "done") doneTasks++;
+        const statusColor =
+          info.status === "done"
+            ? "#3fb950"
+            : info.status === "error"
+              ? "#f85149"
+              : "#58a6ff";
+        const statusText =
+          info.status === "done"
+            ? "✅ 完成"
+            : info.status === "error"
+              ? "❌ 错误"
+              : info.status === "downloading"
+                ? "⏳ 下载中"
+                : "⏸ 等待";
+        rows.push(
+          `<tr><td>${symbol}</td><td><span class="badge badge-blue">${bar}</span></td><td style="color:${statusColor}">${statusText}</td><td>${info.downloaded}</td><td>${info.total}</td></tr>`,
+        );
+      }
     }
-    tbody.innerHTML = rows.join('');
-    document.getElementById('dl-count').textContent = `${doneTasks}/${totalTasks}`;
-    document.getElementById('dl-bar').style.width =
-        totalTasks > 0 ? (doneTasks / totalTasks * 100) + '%' : '0%';
-
+    tbody.innerHTML = rows.join("");
+    document.getElementById("dl-count").textContent =
+      `${doneTasks}/${totalTasks}`;
+    document.getElementById("dl-bar").style.width =
+      totalTasks > 0 ? (doneTasks / totalTasks) * 100 + "%" : "0%";
     if (doneTasks === totalTasks && totalTasks > 0) {
-        document.getElementById('dl-status-text').textContent = '✅ 全部完成';
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      document.getElementById("dl-status-text").textContent = "✅ 全部完成";
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
     }
-}
+  }
 
-// ===== CSV 模板下载
-function downloadTemplate() {
-    window.open('/api/csv/template', '_blank');
-}
+  // ===== CSV
+  function downloadTemplate() {
+    window.open("/api/csv/template", "_blank");
+  }
 
-// ===== CSV 导入
-async function importCSV() {
-    const fileInput = document.getElementById('csv-file');
+  async function importCSV() {
+    const fileInput = document.getElementById("csv-file");
     if (!fileInput.files.length) {
-        alert('请选择 CSV 文件');
-        return;
+      alert("请选择 CSV 文件");
+      return;
     }
     const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-
-    const el = document.getElementById('csv-result');
+    formData.append("file", fileInput.files[0]);
+    const el = document.getElementById("csv-result");
     el.innerHTML = '<span style="color:#8b949e">导入中...</span>';
-
     try {
-        const resp = await fetch('/api/csv/import', {method: 'POST', body: formData});
-        const data = await resp.json();
-        if (data.error) {
-            el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
-        } else {
-            let html = `<span style="color:#3fb950">✅ 导入 ${data.imported} 条，跳过 ${data.skipped} 条</span>`;
-            if (data.errors && data.errors.length) {
-                html += `<br><span style="color:#f85149">${data.errors.join('<br>')}</span>`;
-            }
-            el.innerHTML = html;
-        }
-    } catch(e) {
-        el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
+      const resp = await fetch("/api/csv/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (data.error) {
+        el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
+      } else {
+        let html = `<span style="color:#3fb950">✅ 导入 ${data.imported} 条，跳过 ${data.skipped} 条</span>`;
+        if (data.errors && data.errors.length)
+          html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
+        el.innerHTML = html;
+      }
+    } catch (e) {
+      el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
     }
-}
+  }
 </script>
 {% endblock %}

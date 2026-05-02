@@ -19,6 +19,11 @@ TABLE_TRADE_RECORDS = "trade_records"
 TABLE_POSITION_SNAPSHOTS = "position_snapshots"
 TABLE_SCAN_RESULTS = "scan_results"
 TABLE_APP_SETTINGS = "app_settings"
+TABLE_KLINE_DATA = "kline_data"
+TABLE_DOWNLOAD_STATUS = "download_status"
+
+# ===== 下载参数
+DOWNLOAD_BATCH_SIZE = 100  # 每次拉取 K 线条数
 
 # ===== 止损回测默认参数
 DEFAULT_STOPLOSS_RATIOS = [0.05, 0.10, 0.15, 0.20]

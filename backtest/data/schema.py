@@ -6,6 +6,7 @@ from backtest.config import (
     DB_PATH, DATA_DIR,
     TABLE_TRADE_RECORDS, TABLE_POSITION_SNAPSHOTS,
     TABLE_SCAN_RESULTS, TABLE_APP_SETTINGS,
+    TABLE_KLINE_DATA, TABLE_DOWNLOAD_STATUS,
 )
 
 
@@ -102,6 +103,39 @@ def init_database(db_path: str = None) -> sqlite3.Connection:
         key             TEXT PRIMARY KEY,
         value           TEXT NOT NULL,
         updated_at      TEXT DEFAULT (datetime('now'))
+    )
+    """)
+
+    # ---- 5. K 线数据表
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {TABLE_KLINE_DATA} (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol          TEXT NOT NULL,
+        bar             TEXT NOT NULL,
+        time            TEXT NOT NULL,
+        open            REAL NOT NULL,
+        high            REAL NOT NULL,
+        low             REAL NOT NULL,
+        close           REAL NOT NULL,
+        volume          REAL,
+        amount          REAL,
+        source          TEXT DEFAULT 'okx',
+        UNIQUE(symbol, bar, time)
+    )
+    """)
+    cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_kline_sym_bar ON {TABLE_KLINE_DATA}(symbol, bar)")
+    cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_kline_time ON {TABLE_KLINE_DATA}(time)")
+
+    # ---- 6. 下载状态表
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {TABLE_DOWNLOAD_STATUS} (
+        symbol          TEXT NOT NULL,
+        bar             TEXT NOT NULL,
+        first_time      TEXT,
+        last_time       TEXT,
+        record_count    INTEGER DEFAULT 0,
+        updated_at      TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (symbol, bar)
     )
     """)
 

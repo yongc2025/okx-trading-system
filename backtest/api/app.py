@@ -227,6 +227,8 @@ async def api_kline_download(request: Request):
     symbols = body.get("symbols", [])
     bars = body.get("bars", ["5m"])
     days = body.get("days", 90)
+    start_date = body.get("start_date")  # "YYYY-MM-DD" or None
+    end_date = body.get("end_date")      # "YYYY-MM-DD" or None
 
     if not symbols:
         return JSONResponse({"error": "请指定币种"}, status_code=400)
@@ -250,7 +252,10 @@ async def api_kline_download(request: Request):
                 passphrase=passphrase, is_demo=is_demo,
             )
             _kline_downloader = KlineDownloader(client)
-            result = await _kline_downloader.download(symbols, bars, days)
+            result = await _kline_downloader.download(
+                symbols, bars, days,
+                start_date=start_date, end_date=end_date,
+            )
             await client.close()
             return JSONResponse(result)
         except Exception as e:

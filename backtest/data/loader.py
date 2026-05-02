@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from backtest.config import PKL_DATA_DIR, MIN_KLINE_COUNT
+from backtest.config import PKL_DATA_DIR, MIN_KLINE_COUNT, TABLE_KLINE_DATA, TABLE_DOWNLOAD_STATUS
 from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS
 
 
@@ -191,3 +191,38 @@ def check_imported(file_path: Path, conn: sqlite3.Connection = None) -> bool:
     if own_conn:
         conn.close()
     return row is not None and row['status'] == 'done'
+
+
+def get_kline_info() -> list[dict]:
+    """
+    获取 K 线数据概览（供前端 data.html 使用）
+
+    Returns:
+        [{"symbol": "BTC-USDT-SWAP", "bar": "5m", "first_time": "...", "last_time": "...", "count": 1234}, ...]
+    """
+    conn = get_connection()
+    try:
+        # 优先从 download_status 表读取（更高效）
+        try:
+            cur = conn.execute(
+                f"SELECT symbol, bar, first_time, last_time, record_count as count "
+                f"FROM {TABLE_DOWNLOAD_STATUS} ORDER BY symbol, bar"
+            )
+            rows = cur.fetchall()
+            if rows:
+                return [dict(r) for r in rows]
+        except Exception:
+            pass
+
+        # 回退：从 kline_data 表聚合
+        try:
+            cur = conn.execute(
+                f"SELECT symbol, bar, MIN(time) as first_time, MAX(time) as last_time, COUNT(*) as count "
+                f"FROM {TABLE_KLINE_DATA} GROUP BY symbol, bar ORDER BY symbol, bar"
+            )
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+    finally:
+        conn.close()

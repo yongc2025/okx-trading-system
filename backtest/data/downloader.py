@@ -58,20 +58,45 @@ class KlineDownloader:
     # 公开接口
     # -----------------------------------------------------------------------
 
-    async def download(self, symbols: list[str], bars: list[str], days: int = 90) -> dict:
+    async def download(
+        self,
+        symbols: list[str],
+        bars: list[str],
+        days: int = 90,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict:
         """
         下载多个币种、多个周期的 K 线
 
         Args:
             symbols: ["BTC-USDT-SWAP", "ETH-USDT-SWAP", ...]
             bars: ["1m", "5m", "1H", ...]
-            days: 下载最近多少天
+            days: 下载最近多少天（当 start_date/end_date 未指定时生效）
+            start_date: 起始日期 "YYYY-MM-DD"（优先于 days）
+            end_date:   结束日期 "YYYY-MM-DD"（默认今天）
 
         Returns:
             {"total": 100, "downloaded": 80, "errors": [...]}
         """
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-        start_ms = now_ms - days * 24 * 3600 * 1000
+
+        if start_date:
+            # 使用自定义日期范围
+            dt_start = datetime.strptime(start_date, "%Y-%m-%d")
+            dt_start = dt_start.replace(tzinfo=timezone(timedelta(hours=8)))
+            start_ms = int(dt_start.timestamp() * 1000)
+
+            if end_date:
+                dt_end = datetime.strptime(end_date, "%Y-%m-%d")
+                # 结束日期包含当天，取当天 23:59:59
+                dt_end = dt_end.replace(hour=23, minute=59, second=59, tzinfo=timezone(timedelta(hours=8)))
+                end_ms = int(dt_end.timestamp() * 1000)
+            else:
+                end_ms = now_ms
+        else:
+            start_ms = now_ms - days * 24 * 3600 * 1000
+            end_ms = now_ms
 
         total_tasks = len(symbols) * len(bars)
         downloaded = 0
@@ -90,7 +115,7 @@ class KlineDownloader:
         for symbol in symbols:
             for bar in bars:
                 try:
-                    count = await self._download_single(symbol, bar, start_ms, now_ms)
+                    count = await self._download_single(symbol, bar, start_ms, end_ms)
                     downloaded += 1
                     self._update_progress(symbol, bar, count, count, "done")
                     logger.info(f"[KlineDownloader] {symbol}/{bar} 下载完成，共 {count} 条")
@@ -113,7 +138,10 @@ class KlineDownloader:
         end_time: int,
     ) -> int:
         """
-        下载单个 (symbol, bar) 的 K 线，支持增量和断点续传
+        下载单个 (symbol, bar) 的 K 线
+
+        策略：每次下载前清理该 (symbol, bar) 的旧数据，全量写入新数据。
+        保证数据集干净、无断层、无重复。
 
         Args:
             symbol: 交易对
@@ -124,30 +152,23 @@ class KlineDownloader:
         Returns:
             本次下载的 K 线条数
         """
-        # 1. 查询本地已有数据，确定续传起点
+        # 1. 清理该 (symbol, bar) 的旧数据
         conn = get_connection(self.db_path)
         try:
-            row = conn.execute(
-                f"SELECT last_time, first_time, record_count FROM {TABLE_DOWNLOAD_STATUS} "
-                "WHERE symbol=? AND bar=?",
+            conn.execute(
+                f"DELETE FROM {TABLE_KLINE_DATA} WHERE symbol=? AND bar=?",
                 (symbol, bar),
-            ).fetchone()
-
-            if row and row["last_time"]:
-                # 增量下载：从上次最新时间开始
-                existing_last_ms = _iso_to_ms(row["last_time"])
-                if existing_last_ms >= end_time:
-                    logger.debug(f"[KlineDownloader] {symbol}/{bar} 数据已是最新，跳过")
-                    return 0
-                # 从已有数据的下一毫秒开始
-                effective_start = existing_last_ms + 1
-                logger.info(
-                    f"[KlineDownloader] {symbol}/{bar} 增量下载，起点: {_ms_to_iso(effective_start)}"
-                )
-            else:
-                effective_start = start_time
+            )
+            conn.execute(
+                f"DELETE FROM {TABLE_DOWNLOAD_STATUS} WHERE symbol=? AND bar=?",
+                (symbol, bar),
+            )
+            conn.commit()
+            logger.info(f"[KlineDownloader] {symbol}/{bar} 已清理旧数据，准备重新下载")
         finally:
             conn.close()
+
+        effective_start = start_time
 
         # 2. 分页拉取 K 线
         all_klines: list = []

@@ -109,10 +109,14 @@
         <div class="logo">OKX <span>回测系统</span></div>
         <div class="nav-links">
             <a href="/" class="{% if active == 'index' %}active{% endif %}">📊 统计看板</a>
+            <a href="/data" class="{% if active == 'data' %}active{% endif %}">📥 数据管理</a>
+            <a href="/orders" class="{% if active == 'orders' %}active{% endif %}">📋 订单分析</a>
             <a href="/hold-loss" class="{% if active == 'hold_loss' %}active{% endif %}">⚠️ 扛单分析</a>
             <a href="/stoploss" class="{% if active == 'stoploss' %}active{% endif %}">🛡️ 止损回测</a>
             <a href="/position" class="{% if active == 'position' %}active{% endif %}">📈 仓位分析</a>
             <a href="/scan" class="{% if active == 'scan' %}active{% endif %}">⚡ 极端行情</a>
+            <a href="/simulate" class="{% if active == 'simulate' %}active{% endif %}">🧪 模拟回测</a>
+            <a href="/optimize" class="{% if active == 'optimize' %}active{% endif %}">⚙️ 参数优化</a>
         </div>
     </nav>
     <div class="container">
