@@ -14,3 +14,4 @@ data/pkl/
 venv/
 *.egg
 .eggs/
+backtest/data/.key

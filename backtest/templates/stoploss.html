@@ -1,140 +1,176 @@
-{% extends "base.html" %}
-{% set active = "stoploss" %}
-{% block title %}止损回测 - OKX 回测系统{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% set active = "stoploss" %} {% block title
+%}止损回测 - OKX 回测系统{% endblock %} {% block content %}
 <div class="card">
-    <h2>🛡️ 止损回测模拟</h2>
-    <p style="color:#8b949e;margin-bottom:16px;font-size:14px;">
-        模拟不同止损比例下的交易结果：假设每笔亏损交易在达到止损线时严格平仓，对比实际结果与模拟结果。
-    </p>
+  <h2>🛡️ 止损回测模拟</h2>
+  <p style="color: #8b949e; margin-bottom: 16px; font-size: 14px">
+    模拟不同止损比例下的交易结果：假设每笔亏损交易在达到止损线时严格平仓，对比实际结果与模拟结果。
+  </p>
 </div>
 
 <!-- 对比表格 -->
 <div class="card">
-    <h2>📊 多止损比例对比</h2>
-    <div class="table-scroll">
-        <table id="comparison-table">
-            <thead>
-                <tr>
-                    <th>止损比例</th>
-                    <th>总笔数</th>
-                    <th>盈利</th>
-                    <th>亏损</th>
-                    <th>胜率</th>
-                    <th>总盈亏</th>
-                    <th>平均盈亏</th>
-                    <th>平均盈利</th>
-                    <th>平均亏损</th>
-                    <th>盈亏比</th>
-                    <th>被止损笔数</th>
-                    <th>止损减少亏损</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
+  <h2>📊 多止损比例对比</h2>
+  <div class="table-scroll">
+    <table id="comparison-table">
+      <thead>
+        <tr>
+          <th>止损比例</th>
+          <th>总笔数</th>
+          <th>盈利</th>
+          <th>亏损</th>
+          <th>胜率</th>
+          <th>总盈亏</th>
+          <th>平均盈亏</th>
+          <th>平均盈利</th>
+          <th>平均亏损</th>
+          <th>盈亏比</th>
+          <th>被止损笔数</th>
+          <th>止损减少亏损</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- 收益曲线对比 -->
 <div class="card">
-    <h2>📈 累计收益曲线对比</h2>
-    <div class="chart-container" id="equity-curves-chart"></div>
+  <h2>📈 累计收益曲线对比</h2>
+  <div class="chart-container" id="equity-curves-chart"></div>
 </div>
 
 <!-- ROI 对比 -->
 <div class="card">
-    <h2>📉 收益率对比</h2>
-    <div class="chart-container" id="roi-chart"></div>
+  <h2>📉 收益率对比</h2>
+  <div class="chart-container" id="roi-chart"></div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-async function loadData() {
-    const data = await fetch('/api/stoploss').then(r => r.json());
+  async function loadData() {
+    const q = accountQuery();
+    const data = await fetch("/api/stoploss" + q).then((r) => r.json());
 
     // 对比表格
     const comp = data.comparison;
-    const tbody = document.querySelector('#comparison-table tbody');
-    const colors = ['#58a6ff', '#c9d1d9', '#3fb950', '#f0883e', '#f85149', '#bc8cff'];
-    tbody.innerHTML = comp.comparison_table.map((r, i) => {
-        const isOriginal = r.stoploss_pct === '实际结果';
-        const rowBg = isOriginal ? 'background:#1c2333;' : '';
+    const tbody = document.querySelector("#comparison-table tbody");
+    const colors = [
+      "#58a6ff",
+      "#c9d1d9",
+      "#3fb950",
+      "#f0883e",
+      "#f85149",
+      "#bc8cff",
+    ];
+    tbody.innerHTML = comp.comparison_table
+      .map((r, i) => {
+        const isOriginal = r.stoploss_pct === "实际结果";
+        const rowBg = isOriginal ? "background:#1c2333;" : "";
         return `<tr style="${rowBg}">
-            <td><span class="badge ${isOriginal?'badge-blue':'badge-green'}">${r.stoploss_pct}</span></td>
+            <td><span class="badge ${isOriginal ? "badge-blue" : "badge-green"}">${r.stoploss_pct}</span></td>
             <td>${r.total_trades}</td>
             <td class="positive">${r.wins}</td>
             <td class="negative">${r.losses}</td>
             <td class="neutral">${r.win_rate_pct}</td>
-            <td class="${r.total_pnl>=0?'positive':'negative'}">${r.total_pnl.toFixed(2)}</td>
-            <td class="${r.avg_pnl>=0?'positive':'negative'}">${r.avg_pnl.toFixed(2)}</td>
+            <td class="${r.total_pnl >= 0 ? "positive" : "negative"}">${r.total_pnl.toFixed(2)}</td>
+            <td class="${r.avg_pnl >= 0 ? "positive" : "negative"}">${r.avg_pnl.toFixed(2)}</td>
             <td class="positive">${r.avg_win.toFixed(2)}</td>
             <td class="negative">${r.avg_loss.toFixed(2)}</td>
             <td class="neutral">${r.profit_loss_ratio}</td>
             <td>${r.simulated_count || 0}</td>
-            <td class="positive">${(r.pnl_saved_by_stoploss||0).toFixed(2)}</td>
+            <td class="positive">${(r.pnl_saved_by_stoploss || 0).toFixed(2)}</td>
         </tr>`;
-    }).join('');
+      })
+      .join("");
 
     // 收益曲线对比
     const curves = data.equity_curves;
     const labels = Object.keys(curves);
     if (labels.length > 0) {
-        const chart = echarts.init(document.getElementById('equity-curves-chart'));
-        const series = labels.map((label, i) => ({
-            name: label,
-            type: 'line',
-            data: curves[label].equity,
-            smooth: true,
-            lineStyle: { width: 2 },
-            itemStyle: { color: colors[i % colors.length] },
-            symbol: 'none',
-        }));
-        chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-            legend: { data: labels, textStyle: { color: '#8b949e' }, top: 0 },
-            grid: { left: 60, right: 20, top: 40, bottom: 40 },
-            xAxis: {
-                type: 'category',
-                data: curves[labels[0]].time.map(t => String(t).substring(0, 16)),
-                axisLine: { lineStyle: { color: '#30363d' }}, axisLabel: { color: '#8b949e' },
-            },
-            yAxis: { type: 'value', axisLine: { lineStyle: { color: '#30363d' }}, splitLine: { lineStyle: { color: '#21262d' }}, axisLabel: { color: '#8b949e' }},
-            series: series,
-        });
-        window.addEventListener('resize', () => chart.resize());
+      const chart = echarts.init(
+        document.getElementById("equity-curves-chart"),
+      );
+      const series = labels.map((label, i) => ({
+        name: label,
+        type: "line",
+        data: curves[label].equity,
+        smooth: true,
+        lineStyle: { width: 2 },
+        itemStyle: { color: colors[i % colors.length] },
+        symbol: "none",
+      }));
+      chart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+        },
+        legend: { data: labels, textStyle: { color: "#8b949e" }, top: 0 },
+        grid: { left: 60, right: 20, top: 40, bottom: 40 },
+        xAxis: {
+          type: "category",
+          data: curves[labels[0]].time.map((t) => String(t).substring(0, 16)),
+          axisLine: { lineStyle: { color: "#30363d" } },
+          axisLabel: { color: "#8b949e" },
+        },
+        yAxis: {
+          type: "value",
+          axisLine: { lineStyle: { color: "#30363d" } },
+          splitLine: { lineStyle: { color: "#21262d" } },
+          axisLabel: { color: "#8b949e" },
+        },
+        series: series,
+      });
+      window.addEventListener("resize", () => chart.resize());
 
-        // ROI 对比
-        const roiChart = echarts.init(document.getElementById('roi-chart'));
-        const roiSeries = labels.map((label, i) => ({
-            name: label,
-            type: 'line',
-            data: curves[label].roi.map(v => (v * 100).toFixed(2)),
-            smooth: true,
-            lineStyle: { width: 2 },
-            itemStyle: { color: colors[i % colors.length] },
-            symbol: 'none',
-        }));
-        roiChart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }, formatter: params => {
-                let s = params[0].axisValue + '<br/>';
-                params.forEach(p => { s += `<span style="color:${p.color}">${p.seriesName}</span>: ${p.value}%<br/>`; });
-                return s;
-            }},
-            legend: { data: labels, textStyle: { color: '#8b949e' }, top: 0 },
-            grid: { left: 60, right: 20, top: 40, bottom: 40 },
-            xAxis: {
-                type: 'category',
-                data: curves[labels[0]].time.map(t => String(t).substring(0, 16)),
-                axisLine: { lineStyle: { color: '#30363d' }}, axisLabel: { color: '#8b949e' },
-            },
-            yAxis: { type: 'value', axisLine: { lineStyle: { color: '#30363d' }}, splitLine: { lineStyle: { color: '#21262d' }}, axisLabel: { color: '#8b949e', formatter: '{value}%' }},
-            series: roiSeries,
-        });
-        window.addEventListener('resize', () => roiChart.resize());
+      // ROI 对比
+      const roiChart = echarts.init(document.getElementById("roi-chart"));
+      const roiSeries = labels.map((label, i) => ({
+        name: label,
+        type: "line",
+        data: curves[label].roi.map((v) => (v * 100).toFixed(2)),
+        smooth: true,
+        lineStyle: { width: 2 },
+        itemStyle: { color: colors[i % colors.length] },
+        symbol: "none",
+      }));
+      roiChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+          formatter: (params) => {
+            let s = params[0].axisValue + "<br/>";
+            params.forEach((p) => {
+              s += `<span style="color:${p.color}">${p.seriesName}</span>: ${p.value}%<br/>`;
+            });
+            return s;
+          },
+        },
+        legend: { data: labels, textStyle: { color: "#8b949e" }, top: 0 },
+        grid: { left: 60, right: 20, top: 40, bottom: 40 },
+        xAxis: {
+          type: "category",
+          data: curves[labels[0]].time.map((t) => String(t).substring(0, 16)),
+          axisLine: { lineStyle: { color: "#30363d" } },
+          axisLabel: { color: "#8b949e" },
+        },
+        yAxis: {
+          type: "value",
+          axisLine: { lineStyle: { color: "#30363d" } },
+          splitLine: { lineStyle: { color: "#21262d" } },
+          axisLabel: { color: "#8b949e", formatter: "{value}%" },
+        },
+        series: roiSeries,
+      });
+      window.addEventListener("resize", () => roiChart.resize());
     }
-}
-loadData();
+  }
+  loadData();
+
+  function onAccountChange(accountId) {
+    loadData();
+  }
 </script>
 {% endblock %}

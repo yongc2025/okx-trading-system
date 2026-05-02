@@ -2,11 +2,112 @@
 数据库操作封装
 """
 import sqlite3
+import hashlib
+import time
 from typing import List, Dict, Any, Optional
 
 import pandas as pd
 
-from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS, TABLE_POSITION_SNAPSHOTS
+from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS, TABLE_POSITION_SNAPSHOTS, TABLE_ACCOUNTS
+from backtest.data.encryption import encrypt, decrypt
+
+
+def save_account(
+    account_name: str,
+    api_key: str,
+    secret: str,
+    passphrase: str,
+    is_demo: int = 1,
+    conn: sqlite3.Connection = None
+) -> str:
+    """保存或更新账户信息，返回 account_id"""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+    
+    # 生成 account_id: acc_ + name的md5前8位
+    account_id = "acc_" + hashlib.md5(account_name.encode()).hexdigest()[:8]
+    
+    # 加密敏感信息
+    enc_api = encrypt(api_key)
+    enc_secret = encrypt(secret)
+    enc_pass = encrypt(passphrase)
+    
+    conn.execute(f"""
+        INSERT INTO {TABLE_ACCOUNTS} (account_id, account_name, api_key, secret, passphrase, is_demo, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(account_id) DO UPDATE SET
+            account_name=excluded.account_name,
+            api_key=excluded.api_key,
+            secret=excluded.secret,
+            passphrase=excluded.passphrase,
+            is_demo=excluded.is_demo,
+            updated_at=datetime('now')
+    """, (account_id, account_name, enc_api, enc_secret, enc_pass, is_demo))
+    
+    if own_conn:
+        conn.commit()
+        conn.close()
+    else:
+        conn.commit()
+    return account_id
+
+
+def get_accounts(conn: sqlite3.Connection = None) -> List[Dict[str, Any]]:
+    """获取所有账户（脱敏）"""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+    cur = conn.execute(f"SELECT account_id, account_name, api_key, is_demo, created_at FROM {TABLE_ACCOUNTS}")
+    accounts = []
+    for row in cur.fetchall():
+        d = dict(row)
+        # API Key 只显示前4位和后4位
+        raw_api = decrypt(d['api_key'])
+        d['api_key_display'] = f"{raw_api[:4]}...{raw_api[-4:]}" if len(raw_api) > 8 else "****"
+        del d['api_key'] 
+        accounts.append(d)
+    if own_conn:
+        conn.close()
+    return accounts
+
+
+def get_account_detail(account_id: str, conn: sqlite3.Connection = None) -> Optional[Dict[str, Any]]:
+    """获取完整账户信息（解密后）"""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+    cur = conn.execute(f"SELECT * FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,))
+    row = cur.fetchone()
+    if not row:
+        if own_conn: conn.close()
+        return None
+    
+    d = dict(row)
+    d['api_key'] = decrypt(d['api_key'])
+    d['secret'] = decrypt(d['secret'])
+    d['passphrase'] = decrypt(d['passphrase'])
+    
+    if own_conn:
+        conn.close()
+    return d
+
+
+def delete_account(account_id: str, conn: sqlite3.Connection = None):
+    """删除账户及其关联数据"""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
+    
+    # 级联删除数据（如果 schema 没设级联，我们就手动删）
+    conn.execute(f"DELETE FROM {TABLE_TRADE_RECORDS} WHERE account_id = ?", (account_id,))
+    conn.execute(f"DELETE FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,))
+    
+    if own_conn:
+        conn.commit()
+        conn.close()
+    else:
+        conn.commit()
 
 
 def insert_trade_records(records: List[Dict], conn: sqlite3.Connection = None) -> int:
@@ -146,3 +247,5 @@ def clear_all_data(conn: sqlite3.Connection = None):
     if own_conn:
         conn.commit()
         conn.close()
+    else:
+        conn.commit()

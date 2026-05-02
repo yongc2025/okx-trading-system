@@ -234,6 +234,29 @@
         max-height: 500px;
         overflow-y: auto;
       }
+
+      /* 全局账户选择器 */
+      .global-account-selector {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .global-account-selector select {
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #30363d;
+        background: #0d1117;
+        color: #c9d1d9;
+        font-size: 13px;
+        height: 34px;
+        cursor: pointer;
+        min-width: 150px;
+      }
+      .global-account-selector select:focus {
+        border-color: #58a6ff;
+        outline: none;
+      }
     </style>
   </head>
   <body>
@@ -278,6 +301,15 @@
           >⚙️ 参数优化</a
         >
       </div>
+      <!-- 全局账户选择器 -->
+      <div class="global-account-selector" id="global-account-selector">
+        <select
+          id="global-account-select"
+          onchange="onGlobalAccountChange(this.value)"
+        >
+          <option value="">全部账户</option>
+        </select>
+      </div>
     </nav>
     <div class="container">{% block content %}{% endblock %}</div>
     <!-- Toast 通知 -->
@@ -311,6 +343,86 @@
           setTimeout(() => el.remove(), 300);
         }, 4000);
       }
+
+      // ===== 全局账户选择器 =====
+      // 当前选中的账户 ID（从 localStorage 恢复）
+      let currentAccountId = localStorage.getItem("selected_account_id") || "";
+
+      async function loadAccountSelector() {
+        try {
+          const resp = await fetch("/api/accounts");
+          const accounts = await resp.json();
+          const sel = document.getElementById("global-account-select");
+          if (!sel) return;
+
+          // 保留"全部账户"选项
+          sel.innerHTML = '<option value="">全部账户</option>';
+          if (Array.isArray(accounts)) {
+            accounts.forEach((acc) => {
+              const opt = document.createElement("option");
+              opt.value = acc.account_id;
+              const envLabel = acc.is_demo ? "模拟" : "实盘";
+              opt.textContent = `${acc.account_name} (${envLabel})`;
+              sel.appendChild(opt);
+            });
+          }
+
+          // 恢复上次选择
+          if (currentAccountId) {
+            // 验证账户是否还存在
+            const exists = accounts.some(
+              (a) => a.account_id === currentAccountId,
+            );
+            if (exists) {
+              sel.value = currentAccountId;
+            } else {
+              // 账户已删除，重置
+              currentAccountId = "";
+              localStorage.removeItem("selected_account_id");
+            }
+          }
+
+          // 触发回调，让页面知道账户已加载完毕
+          if (typeof onAccountSelectorReady === "function") {
+            onAccountSelectorReady();
+          }
+        } catch (e) {
+          console.error("加载账户列表失败:", e);
+        }
+      }
+
+      function onGlobalAccountChange(value) {
+        currentAccountId = value;
+        if (value) {
+          localStorage.setItem("selected_account_id", value);
+        } else {
+          localStorage.removeItem("selected_account_id");
+        }
+        // 触发页面自定义回调
+        if (typeof onAccountChange === "function") {
+          onAccountChange(value);
+        }
+      }
+
+      // 构建带 account_id 的查询参数
+      function accountQuery() {
+        return currentAccountId ? `?account_id=${currentAccountId}` : "";
+      }
+
+      // 构建带 account_id 的 fetch options
+      function accountFetchOptions(method, body) {
+        const opts = {
+          method: method || "GET",
+          headers: { "Content-Type": "application/json" },
+        };
+        if (body) {
+          opts.body = JSON.stringify(body);
+        }
+        return opts;
+      }
+
+      // 页面加载时自动初始化账户选择器
+      document.addEventListener("DOMContentLoaded", loadAccountSelector);
     </script>
     {% block scripts %}{% endblock %}
   </body>

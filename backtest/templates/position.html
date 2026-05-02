@@ -1,13 +1,11 @@
-{% extends "base.html" %}
-{% set active = "position" %}
-{% block title %}仓位分析 - OKX 回测系统{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% set active = "position" %} {% block title
+%}仓位分析 - OKX 回测系统{% endblock %} {% block content %}
 <div class="card">
-    <h2>📈 仓位策略分层分析</h2>
-    <p style="color:#8b949e;margin-bottom:16px;font-size:14px;">
-        按仓位档位（首仓50% / 第一次加仓25% / 第二次加仓25%）分层统计交易表现，评估加仓策略对整体业绩的影响。
-    </p>
+  <h2>📈 仓位策略分层分析</h2>
+  <p style="color: #8b949e; margin-bottom: 16px; font-size: 14px">
+    按仓位档位（首仓50% / 第一次加仓25% /
+    第二次加仓25%）分层统计交易表现，评估加仓策略对整体业绩的影响。
+  </p>
 </div>
 
 <!-- 分层统计卡片 -->
@@ -15,89 +13,91 @@
 
 <!-- 首仓 vs 加仓对比 -->
 <div class="card">
-    <h2>🔍 首仓 vs 加仓后整体对比</h2>
-    <div class="stats-grid" id="comparison-cards"></div>
+  <h2>🔍 首仓 vs 加仓后整体对比</h2>
+  <div class="stats-grid" id="comparison-cards"></div>
 </div>
 
 <div class="two-col">
-    <!-- 分层对比柱状图 -->
-    <div class="card">
-        <h2>📊 分层指标对比</h2>
-        <div class="chart-container small" id="tier-bar-chart"></div>
-    </div>
-    <!-- 加仓次数分布 -->
-    <div class="card">
-        <h2>🥧 加仓完成度分布</h2>
-        <div class="chart-container small" id="completion-pie-chart"></div>
-    </div>
+  <!-- 分层对比柱状图 -->
+  <div class="card">
+    <h2>📊 分层指标对比</h2>
+    <div class="chart-container small" id="tier-bar-chart"></div>
+  </div>
+  <!-- 加仓次数分布 -->
+  <div class="card">
+    <h2>🥧 加仓完成度分布</h2>
+    <div class="chart-container small" id="completion-pie-chart"></div>
+  </div>
 </div>
 
 <!-- 详细对比表格 -->
 <div class="card">
-    <h2>📋 分层详细数据</h2>
-    <div class="table-scroll">
-        <table id="tier-table">
-            <thead>
-                <tr>
-                    <th>仓位档位</th>
-                    <th>笔数</th>
-                    <th>盈利</th>
-                    <th>亏损</th>
-                    <th>胜率</th>
-                    <th>总盈亏</th>
-                    <th>平均盈亏</th>
-                    <th>盈亏比</th>
-                    <th>止损触发</th>
-                    <th>止损比例</th>
-                    <th>平均最大浮亏率</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
+  <h2>📋 分层详细数据</h2>
+  <div class="table-scroll">
+    <table id="tier-table">
+      <thead>
+        <tr>
+          <th>仓位档位</th>
+          <th>笔数</th>
+          <th>盈利</th>
+          <th>亏损</th>
+          <th>胜率</th>
+          <th>总盈亏</th>
+          <th>平均盈亏</th>
+          <th>盈亏比</th>
+          <th>止损触发</th>
+          <th>止损比例</th>
+          <th>平均最大浮亏率</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- 仓位档位分布 -->
 <div class="card">
-    <h2>📊 仓位档位交易笔数分布</h2>
-    <div class="chart-container small" id="tier-dist-chart"></div>
+  <h2>📊 仓位档位交易笔数分布</h2>
+  <div class="chart-container small" id="tier-dist-chart"></div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-async function loadData() {
-    const data = await fetch('/api/position').then(r => r.json());
+  async function loadData() {
+    const q = accountQuery();
+    const data = await fetch("/api/position" + q).then((r) => r.json());
 
     if (data.error) {
-        document.getElementById('tier-cards').innerHTML = `<div class="stat-card"><div class="value">${data.error}</div></div>`;
-        return;
+      document.getElementById("tier-cards").innerHTML =
+        `<div class="stat-card"><div class="value">${data.error}</div></div>`;
+      return;
     }
 
     // 分层统计卡片
     const tiers = [
-        { key: 'first_position', icon: '🎯', color: 'neutral' },
-        { key: 'add1', icon: '➕', color: 'positive' },
-        { key: 'add2', icon: '➕', color: 'positive' },
+      { key: "first_position", icon: "🎯", color: "neutral" },
+      { key: "add1", icon: "➕", color: "positive" },
+      { key: "add2", icon: "➕", color: "positive" },
     ];
-    document.getElementById('tier-cards').innerHTML = tiers.map(t => {
+    document.getElementById("tier-cards").innerHTML = tiers
+      .map((t) => {
         const d = data[t.key];
         return `<div class="stat-card">
             <div class="label">${t.icon} ${d.label}</div>
-            <div class="value ${d.total_pnl>=0?'positive':'negative'}">${(d.total_pnl||0).toFixed(2)}</div>
-            <div class="sub">胜率 ${d.win_rate_pct || '0%'} · ${d.total_trades||0} 笔 · 盈亏比 ${d.profit_loss_ratio||0}</div>
+            <div class="value ${d.total_pnl >= 0 ? "positive" : "negative"}">${(d.total_pnl || 0).toFixed(2)}</div>
+            <div class="sub">胜率 ${d.win_rate_pct || "0%"} · ${d.total_trades || 0} 笔 · 盈亏比 ${d.profit_loss_ratio || 0}</div>
         </div>`;
-    }).join('');
+      })
+      .join("");
 
     // 对比卡片
     const comp = data.comparison;
     const imp = comp.improvement;
     const fp = comp.first_position;
     const aa = comp.after_add;
-    const fmtPct = (v) => v != null ? v : '0.00%';
-    const fmtNum = (v) => v != null ? v : 0;
-    const fmtRatio = (v) => v != null ? v : 0;
-    document.getElementById('comparison-cards').innerHTML = `
+    const fmtPct = (v) => (v != null ? v : "0.00%");
+    const fmtNum = (v) => (v != null ? v : 0);
+    const fmtRatio = (v) => (v != null ? v : 0);
+    document.getElementById("comparison-cards").innerHTML = `
         <div class="stat-card">
             <div class="label">首仓胜率</div>
             <div class="value neutral">${fmtPct(fp.win_rate_pct)}</div>
@@ -105,89 +105,176 @@ async function loadData() {
         </div>
         <div class="stat-card">
             <div class="label">加仓后整体胜率</div>
-            <div class="value neutral">${aa.total_trades > 0 ? fmtPct(aa.win_rate_pct) : '无加仓数据'}</div>
+            <div class="value neutral">${aa.total_trades > 0 ? fmtPct(aa.win_rate_pct) : "无加仓数据"}</div>
             <div class="sub">平均盈亏: ${fmtNum(aa.avg_pnl).toFixed(2)}</div>
         </div>
         <div class="stat-card">
             <div class="label">胜率变化</div>
-            <div class="value ${(imp.win_rate_diff||0)>=0?'positive':'negative'}">${(imp.win_rate_diff||0)>=0?'+':''}${((imp.win_rate_diff||0)*100).toFixed(2)}%</div>
+            <div class="value ${(imp.win_rate_diff || 0) >= 0 ? "positive" : "negative"}">${(imp.win_rate_diff || 0) >= 0 ? "+" : ""}${((imp.win_rate_diff || 0) * 100).toFixed(2)}%</div>
         </div>
         <div class="stat-card">
             <div class="label">平均盈亏变化</div>
-            <div class="value ${(imp.avg_pnl_diff||0)>=0?'positive':'negative'}">${(imp.avg_pnl_diff||0)>=0?'+':''}${(imp.avg_pnl_diff||0).toFixed(2)}</div>
+            <div class="value ${(imp.avg_pnl_diff || 0) >= 0 ? "positive" : "negative"}">${(imp.avg_pnl_diff || 0) >= 0 ? "+" : ""}${(imp.avg_pnl_diff || 0).toFixed(2)}</div>
         </div>
         <div class="stat-card">
             <div class="label">盈亏比变化</div>
-            <div class="value ${(imp.profit_loss_ratio_diff||0)>=0?'positive':'negative'}">${(imp.profit_loss_ratio_diff||0)>=0?'+':''}${(imp.profit_loss_ratio_diff||0).toFixed(2)}</div>
+            <div class="value ${(imp.profit_loss_ratio_diff || 0) >= 0 ? "positive" : "negative"}">${(imp.profit_loss_ratio_diff || 0) >= 0 ? "+" : ""}${(imp.profit_loss_ratio_diff || 0).toFixed(2)}</div>
         </div>
     `;
 
     // 柱状图
     const tierData = [data.first_position, data.add1, data.add2];
-    const barChart = echarts.init(document.getElementById('tier-bar-chart'));
+    const barChart = echarts.init(document.getElementById("tier-bar-chart"));
     barChart.setOption({
-        tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-        legend: { data: ['胜率(%)', '盈亏比', '止损触发率(%)'], textStyle: { color: '#8b949e' }, top: 0 },
-        grid: { left: 50, right: 20, top: 40, bottom: 30 },
-        xAxis: { type: 'category', data: tierData.map(d => d.label), axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}},
-        yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
-        series: [
-            { name: '胜率(%)', type: 'bar', data: tierData.map(d => ((d.win_rate||0)*100).toFixed(1)), itemStyle: { color: '#3fb950' }},
-            { name: '盈亏比', type: 'bar', data: tierData.map(d => d.profit_loss_ratio || 0), itemStyle: { color: '#58a6ff' }},
-            { name: '止损触发率(%)', type: 'bar', data: tierData.map(d => ((d.stoploss_ratio||0)*100).toFixed(1)), itemStyle: { color: '#f85149' }},
-        ],
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "#161b22",
+        borderColor: "#30363d",
+        textStyle: { color: "#c9d1d9" },
+      },
+      legend: {
+        data: ["胜率(%)", "盈亏比", "止损触发率(%)"],
+        textStyle: { color: "#8b949e" },
+        top: 0,
+      },
+      grid: { left: 50, right: 20, top: 40, bottom: 30 },
+      xAxis: {
+        type: "category",
+        data: tierData.map((d) => d.label),
+        axisLabel: { color: "#8b949e" },
+        axisLine: { lineStyle: { color: "#30363d" } },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e" },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          name: "胜率(%)",
+          type: "bar",
+          data: tierData.map((d) => ((d.win_rate || 0) * 100).toFixed(1)),
+          itemStyle: { color: "#3fb950" },
+        },
+        {
+          name: "盈亏比",
+          type: "bar",
+          data: tierData.map((d) => d.profit_loss_ratio || 0),
+          itemStyle: { color: "#58a6ff" },
+        },
+        {
+          name: "止损触发率(%)",
+          type: "bar",
+          data: tierData.map((d) => ((d.stoploss_ratio || 0) * 100).toFixed(1)),
+          itemStyle: { color: "#f85149" },
+        },
+      ],
     });
-    window.addEventListener('resize', () => barChart.resize());
+    window.addEventListener("resize", () => barChart.resize());
 
     // 完成度饼图
     const comp_dist = data.completion_distribution;
-    const pieChart = echarts.init(document.getElementById('completion-pie-chart'));
-    const pieLabels = { first: '仅首仓', add1: '加仓1次', add2: '加仓2次(满仓)' };
+    const pieChart = echarts.init(
+      document.getElementById("completion-pie-chart"),
+    );
+    const pieLabels = {
+      first: "仅首仓",
+      add1: "加仓1次",
+      add2: "加仓2次(满仓)",
+    };
     pieChart.setOption({
-        tooltip: { trigger: 'item', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-        series: [{
-            type: 'pie', radius: ['40%', '70%'],
-            data: Object.entries(comp_dist).map(([k, v]) => ({ name: pieLabels[k] || k, value: v })),
-            label: { color: '#c9d1d9', formatter: '{b}: {c} ({d}%)' },
-            itemStyle: { borderColor: '#161b22', borderWidth: 2 },
-        }],
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "#161b22",
+        borderColor: "#30363d",
+        textStyle: { color: "#c9d1d9" },
+      },
+      series: [
+        {
+          type: "pie",
+          radius: ["40%", "70%"],
+          data: Object.entries(comp_dist).map(([k, v]) => ({
+            name: pieLabels[k] || k,
+            value: v,
+          })),
+          label: { color: "#c9d1d9", formatter: "{b}: {c} ({d}%)" },
+          itemStyle: { borderColor: "#161b22", borderWidth: 2 },
+        },
+      ],
     });
-    window.addEventListener('resize', () => pieChart.resize());
+    window.addEventListener("resize", () => pieChart.resize());
 
     // 详细表格
-    const allTiers = [data.first_position, data.add1, data.add2, data.after_add, data.total];
-    const tbody = document.querySelector('#tier-table tbody');
-    tbody.innerHTML = allTiers.map(r => {
+    const allTiers = [
+      data.first_position,
+      data.add1,
+      data.add2,
+      data.after_add,
+      data.total,
+    ];
+    const tbody = document.querySelector("#tier-table tbody");
+    tbody.innerHTML = allTiers
+      .map((r) => {
         const n = r.total_trades || 0;
-        const safe = (v, d) => v != null && !isNaN(v) ? v : d;
+        const safe = (v, d) => (v != null && !isNaN(v) ? v : d);
         return `<tr>
             <td><strong>${r.label}</strong></td>
             <td>${n}</td>
-            <td class="positive">${safe(r.wins, '-')}</td>
-            <td class="negative">${safe(r.losses, '-')}</td>
-            <td class="neutral">${n > 0 ? r.win_rate_pct : '-'}</td>
-            <td class="${(r.total_pnl||0)>=0?'positive':'negative'}">${(r.total_pnl||0).toFixed(2)}</td>
-            <td class="${(r.avg_pnl||0)>=0?'positive':'negative'}">${(r.avg_pnl||0).toFixed(2)}</td>
-            <td class="neutral">${n > 0 ? r.profit_loss_ratio : '-'}</td>
-            <td>${safe(r.stoploss_triggered, '-')}</td>
-            <td>${n > 0 ? r.stoploss_ratio_pct : '-'}</td>
-            <td class="negative">${n > 0 ? (r.avg_max_floating_loss_rate*100).toFixed(2)+'%' : '-'}</td>
+            <td class="positive">${safe(r.wins, "-")}</td>
+            <td class="negative">${safe(r.losses, "-")}</td>
+            <td class="neutral">${n > 0 ? r.win_rate_pct : "-"}</td>
+            <td class="${(r.total_pnl || 0) >= 0 ? "positive" : "negative"}">${(r.total_pnl || 0).toFixed(2)}</td>
+            <td class="${(r.avg_pnl || 0) >= 0 ? "positive" : "negative"}">${(r.avg_pnl || 0).toFixed(2)}</td>
+            <td class="neutral">${n > 0 ? r.profit_loss_ratio : "-"}</td>
+            <td>${safe(r.stoploss_triggered, "-")}</td>
+            <td>${n > 0 ? r.stoploss_ratio_pct : "-"}</td>
+            <td class="negative">${n > 0 ? (r.avg_max_floating_loss_rate * 100).toFixed(2) + "%" : "-"}</td>
         </tr>`;
-    }).join('');
+      })
+      .join("");
 
     // 档位分布柱状图
     const tierDist = data.tier_distribution;
-    const distChart = echarts.init(document.getElementById('tier-dist-chart'));
-    const distLabels = { first: '首仓 (50%)', add1: '第一次加仓 (25%)', add2: '第二次加仓 (25%)' };
+    const distChart = echarts.init(document.getElementById("tier-dist-chart"));
+    const distLabels = {
+      first: "首仓 (50%)",
+      add1: "第一次加仓 (25%)",
+      add2: "第二次加仓 (25%)",
+    };
     distChart.setOption({
-        tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-        grid: { left: 50, right: 20, top: 20, bottom: 30 },
-        xAxis: { type: 'category', data: Object.keys(tierDist).map(k => distLabels[k] || k), axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}},
-        yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
-        series: [{ type: 'bar', data: Object.values(tierDist), itemStyle: { color: '#1f6feb' }, barWidth: '40%' }],
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "#161b22",
+        borderColor: "#30363d",
+        textStyle: { color: "#c9d1d9" },
+      },
+      grid: { left: 50, right: 20, top: 20, bottom: 30 },
+      xAxis: {
+        type: "category",
+        data: Object.keys(tierDist).map((k) => distLabels[k] || k),
+        axisLabel: { color: "#8b949e" },
+        axisLine: { lineStyle: { color: "#30363d" } },
+      },
+      yAxis: {
+        type: "value",
+        axisLabel: { color: "#8b949e" },
+        splitLine: { lineStyle: { color: "#21262d" } },
+      },
+      series: [
+        {
+          type: "bar",
+          data: Object.values(tierDist),
+          itemStyle: { color: "#1f6feb" },
+          barWidth: "40%",
+        },
+      ],
     });
-    window.addEventListener('resize', () => distChart.resize());
-}
-loadData();
+    window.addEventListener("resize", () => distChart.resize());
+  }
+  loadData();
+
+  function onAccountChange(accountId) {
+    loadData();
+  }
 </script>
 {% endblock %}

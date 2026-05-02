@@ -546,6 +546,7 @@ class OrderDownloader:
 
         return {
             "trade_id": trade_id,
+            "account_id": getattr(self, "account_id", None),
             "symbol": symbol,
             "direction": direction,
             "leverage": 1,  # OKX fills 不含杠杆信息，默认 1
@@ -619,8 +620,11 @@ class OrderImporter:
     OPTIONAL_COLUMNS = {"leverage", "entry_cost", "max_floating_loss", "max_floating_loss_rate"}
     # 合法 direction
     VALID_DIRECTIONS = {"long", "short"}
-    # 时间格式（兼容有秒和无秒两种）
-    TIME_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
+    # 时间格式（支持横杠和斜杠两种连接方式，兼容有秒和无秒）
+    TIME_FORMATS = [
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M"
+    ]
 
     @staticmethod
     def _parse_time(time_str: str) -> datetime | None:

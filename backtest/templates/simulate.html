@@ -102,6 +102,7 @@ async function runSimulation() {
         takeprofit_pct: parseFloat(document.getElementById('sim-tp').value) / 100,
         kline_bar: document.getElementById('sim-bar').value,
         trigger_priority: document.getElementById('sim-priority').value,
+        account_id: currentAccountId || undefined,
     };
 
     try {

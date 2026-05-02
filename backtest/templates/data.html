@@ -1,6 +1,187 @@
 {% extends "base.html" %} {% set active = "data" %} {% block title %}数据管理 -
 OKX 回测系统{% endblock %} {% block content %}
 
+<!-- 账户管理 -->
+<div class="card">
+  <h2>🔑 账户管理</h2>
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px">
+    管理 OKX API 账户，添加账户后可在数据拉取和分析中选择对应账户
+  </p>
+
+  <!-- 已配置账户列表 -->
+  <div id="accounts-list" style="margin-bottom: 16px">
+    <div style="color: #8b949e; font-size: 13px">加载中...</div>
+  </div>
+
+  <!-- 添加账户按钮 / 表单 -->
+  <div id="account-form-area">
+    <button
+      class="btn btn-primary"
+      id="btn-show-add-account"
+      onclick="showAccountForm()"
+    >
+      + 添加账户
+    </button>
+  </div>
+
+  <!-- 添加/编辑弹窗 -->
+  <div id="account-form" style="display: none; margin-top: 16px">
+    <div
+      style="
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        background: #0d1117;
+      "
+    >
+      <h3
+        id="account-form-title"
+        style="font-size: 14px; color: #c9d1d9; margin-bottom: 12px"
+      >
+        添加账户
+      </h3>
+      <input type="hidden" id="edit-account-id" />
+      <div
+        style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px"
+      >
+        <div style="flex: 1; min-width: 200px">
+          <label
+            style="
+              font-size: 13px;
+              color: #8b949e;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >账户名称 *</label
+          >
+          <input
+            type="text"
+            id="acc-name"
+            placeholder="如：子账号A"
+            style="
+              width: 100%;
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid #30363d;
+              background: #161b22;
+              color: #c9d1d9;
+              font-size: 14px;
+            "
+          />
+        </div>
+        <div style="flex: 1; min-width: 200px">
+          <label
+            style="
+              font-size: 13px;
+              color: #8b949e;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >API Key *</label
+          >
+          <input
+            type="text"
+            id="acc-api-key"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            style="
+              width: 100%;
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid #30363d;
+              background: #161b22;
+              color: #c9d1d9;
+              font-size: 14px;
+            "
+          />
+        </div>
+      </div>
+      <div
+        style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px"
+      >
+        <div style="flex: 1; min-width: 200px">
+          <label
+            style="
+              font-size: 13px;
+              color: #8b949e;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >Secret *</label
+          >
+          <input
+            type="password"
+            id="acc-secret"
+            placeholder="Secret Key"
+            style="
+              width: 100%;
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid #30363d;
+              background: #161b22;
+              color: #c9d1d9;
+              font-size: 14px;
+            "
+          />
+        </div>
+        <div style="flex: 1; min-width: 200px">
+          <label
+            style="
+              font-size: 13px;
+              color: #8b949e;
+              display: block;
+              margin-bottom: 4px;
+            "
+            >Passphrase *</label
+          >
+          <input
+            type="password"
+            id="acc-passphrase"
+            placeholder="Passphrase"
+            style="
+              width: 100%;
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid #30363d;
+              background: #161b22;
+              color: #c9d1d9;
+              font-size: 14px;
+            "
+          />
+        </div>
+      </div>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin-bottom: 12px;
+        "
+      >
+        <label
+          style="
+            font-size: 14px;
+            color: #c9d1d9;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          "
+        >
+          <input type="checkbox" id="acc-demo" checked /> 模拟盘
+        </label>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button class="btn btn-primary" onclick="saveAccount()">保存</button>
+        <button class="btn" onclick="testAccountFromForm()">测试连接</button>
+        <button class="btn" onclick="hideAccountForm()">取消</button>
+        <span
+          id="account-form-status"
+          style="font-size: 13px; margin-left: 8px; line-height: 34px"
+        ></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- K 线下载 -->
 <div class="card">
   <h2>📥 K 线下载</h2>
@@ -172,7 +353,30 @@ OKX 回测系统{% endblock %} {% block content %}
 
   <!-- Tab: CSV 导入 -->
   <div id="tab-csv" class="tab-panel active">
-    <div style="margin-bottom: 12px">
+    <div
+      style="
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      "
+    >
+      <label style="color: #8b949e; font-size: 13px">绑定账户:</label>
+      <select
+        id="csv-account-select"
+        style="
+          padding: 6px 10px;
+          border-radius: 6px;
+          border: 1px solid #30363d;
+          background: #0d1117;
+          color: #c9d1d9;
+          font-size: 13px;
+          height: 34px;
+        "
+      >
+        <option value="">不绑定</option>
+      </select>
       <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
     </div>
     <div style="margin-bottom: 12px">
@@ -193,11 +397,7 @@ OKX 回测系统{% endblock %} {% block content %}
     <div id="csv-result" style="font-size: 13px; margin-top: 8px"></div>
 
     <div
-      style="
-        margin-top: 16px;
-        border-top: 1px solid #30363d;
-        padding-top: 16px;
-      "
+      style="margin-top: 16px; border-top: 1px solid #30363d; padding-top: 16px"
     >
       <h2 style="font-size: 14px; margin-bottom: 12px">📋 CSV 格式说明</h2>
       <div style="font-size: 13px; color: #8b949e; line-height: 1.8">
@@ -215,11 +415,48 @@ OKX 回测系统{% endblock %} {% block content %}
 
   <!-- Tab: 从交易所拉取 -->
   <div id="tab-exchange" class="tab-panel">
-    <!-- API 配置（折叠） -->
+    <div style="margin-bottom: 16px">
+      <p style="font-size: 13px; color: #8b949e; margin-bottom: 12px">
+        选择已配置的账户拉取成交记录，或手动输入 API Key
+      </p>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        "
+      >
+        <label style="color: #8b949e; font-size: 13px">选择账户:</label>
+        <select
+          id="fetch-account-select"
+          onchange="onFetchAccountChange()"
+          style="
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-size: 13px;
+            height: 34px;
+            min-width: 180px;
+          "
+        >
+          <option value="">手动输入 API Key</option>
+        </select>
+        <span
+          id="fetch-account-info"
+          style="font-size: 12px; color: #8b949e"
+        ></span>
+      </div>
+    </div>
+
+    <!-- 手动 API 配置（折叠，默认隐藏，选了账户则禁用） -->
     <div class="api-collapse" id="api-config-section">
       <button class="api-collapse-toggle" onclick="toggleApiConfig()">
         <span id="api-toggle-icon">▶</span>
-        <span>OKX API 配置</span>
+        <span>手动 API 配置</span>
         <span id="api-config-badge" class="api-badge" style="display: none"
           >未配置</span
         >
@@ -290,9 +527,6 @@ OKX 回测系统{% endblock %} {% block content %}
           style="font-size: 13px; margin-left: 8px"
         ></span>
       </div>
-      <p style="font-size: 12px; color: #8b949e">
-        需要先配置上方 API Key 并测试连接成功后才能拉取数据
-      </p>
     </div>
   </div>
 </div>
@@ -388,28 +622,46 @@ OKX 回测系统{% endblock %} {% block content %}
     <h2>🛠 数据工具</h2>
 
     <div style="margin-bottom: 16px">
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-        <button class="btn" onclick="backfillFloatLoss()">🔄 补算浮亏数据</button>
+      <div
+        style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"
+      >
+        <button class="btn" onclick="backfillFloatLoss()">
+          🔄 补算浮亏数据
+        </button>
         <span style="font-size: 13px; color: #8b949e"
-          >导入订单后，需先下载 K 线数据，再点击此按钮计算扛单分析所需的浮亏字段</span
+          >导入订单后，需先下载 K
+          线数据，再点击此按钮计算扛单分析所需的浮亏字段</span
         >
       </div>
       <div id="backfill-result" style="font-size: 13px; margin-top: 8px"></div>
     </div>
 
     <div
-      style="
-        margin-top: 16px;
-        border-top: 1px solid #30363d;
-        padding-top: 16px;
-      "
+      style="margin-top: 16px; border-top: 1px solid #30363d; padding-top: 16px"
     >
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+      <div
+        style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"
+      >
+        <label style="color: #8b949e; font-size: 13px">清空范围:</label>
+        <select
+          id="clear-account-select"
+          style="
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #c9d1d9;
+            font-size: 13px;
+            height: 34px;
+          "
+        >
+          <option value="">全部账户</option>
+        </select>
         <button class="btn btn-danger" onclick="clearTrades()">
-          🗑️ 清空所有订单
+          🗑️ 清空订单
         </button>
         <span style="font-size: 13px; color: #8b949e"
-          >删除数据库中全部交易记录和持仓快照，不可恢复</span
+          >删除交易记录和持仓快照，不可恢复</span
         >
       </div>
       <div id="clear-result" style="font-size: 13px; margin-top: 8px"></div>
@@ -829,9 +1081,7 @@ OKX 回测系统{% endblock %} {% block content %}
   function renderDropdown(filter = "") {
     const el = document.getElementById("symbol-dropdown");
     const q = filter.toUpperCase().trim();
-    const filtered = q
-      ? ALL_SYMBOLS.filter((s) => s.includes(q))
-      : ALL_SYMBOLS;
+    const filtered = q ? ALL_SYMBOLS.filter((s) => s.includes(q)) : ALL_SYMBOLS;
 
     if (!filtered.length) {
       const custom = filter.trim().toUpperCase();
@@ -1078,18 +1328,46 @@ OKX 回测系统{% endblock %} {% block content %}
     status.style.color = "#8b949e";
 
     const instType = document.getElementById("order-inst-type").value;
+    const accountId = document.getElementById("fetch-account-select").value;
+
+    // 如果选了账户但没选手动输入，校验
+    if (!accountId) {
+      const apiKey = document.getElementById("cfg-api-key").value.trim();
+      if (!apiKey) {
+        status.textContent = "❌ 请选择账户或填写 API Key";
+        status.style.color = "#f85149";
+        btn.disabled = false;
+        return;
+      }
+    }
+
     try {
+      const body = { inst_type: instType };
+      if (accountId) {
+        body.account_id = accountId;
+      } else {
+        body.api_key = document.getElementById("cfg-api-key").value;
+        body.secret = document.getElementById("cfg-secret").value;
+        body.passphrase = document.getElementById("cfg-passphrase").value;
+        body.is_demo = document.getElementById("cfg-demo").checked;
+      }
+
       const resp = await fetch("/api/orders/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inst_type: instType }),
+        body: JSON.stringify(body),
       });
       const data = await resp.json();
       if (data.error) {
         status.textContent = "❌ " + data.error;
         status.style.color = "#f85149";
       } else {
-        status.textContent = `✅ 成交 ${data.total_fills} 条，配对 ${data.paired_trades} 笔交易`;
+        let msg = `✅ 成交 ${data.total_fills} 条，配对 ${data.paired_trades} 笔交易`;
+        if (accountId) {
+          const acc = accountsData.find((a) => a.account_id === accountId);
+          msg += ` (已绑定: ${acc ? acc.account_name : accountId})`;
+        }
+        status.textContent = msg;
         status.style.color = "#3fb950";
       }
     } catch (e) {
@@ -1227,12 +1505,15 @@ OKX 回测系统{% endblock %} {% block content %}
       alert("请选择 CSV 文件");
       return;
     }
+    const accountId = document.getElementById("csv-account-select").value;
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
     const el = document.getElementById("csv-result");
     el.innerHTML = '<span style="color:#8b949e">导入中...</span>';
     try {
-      const resp = await fetch("/api/csv/import", {
+      let url = "/api/csv/import";
+      if (accountId) url += `?account_id=${accountId}`;
+      const resp = await fetch(url, {
         method: "POST",
         body: formData,
       });
@@ -1241,6 +1522,10 @@ OKX 回测系统{% endblock %} {% block content %}
         el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
       } else {
         let html = `<span style="color:#3fb950">✅ 导入 ${data.imported} 条，跳过 ${data.skipped} 条</span>`;
+        if (accountId) {
+          const acc = accountsData.find((a) => a.account_id === accountId);
+          html += `<br><span style="color:#8b949e">已绑定到账户: ${acc ? acc.account_name : accountId}</span>`;
+        }
         if (data.errors && data.errors.length)
           html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
         el.innerHTML = html;
@@ -1251,14 +1536,24 @@ OKX 回测系统{% endblock %} {% block content %}
   }
 
   async function clearTrades() {
-    if (!confirm("确定要清空所有交易记录吗？此操作不可恢复！")) return;
+    const accountId = document.getElementById("clear-account-select").value;
+    const scopeText = accountId
+      ? `账户 "${accountsData.find((a) => a.account_id === accountId)?.account_name || accountId}" 的交易记录`
+      : "所有交易记录";
+    if (!confirm(`确定要清空${scopeText}吗？此操作不可恢复！`)) return;
     const el = document.getElementById("clear-result");
     el.innerHTML = '<span style="color:#8b949e">清空中...</span>';
     try {
-      const resp = await fetch("/api/clear-trades", { method: "POST" });
+      const body = {};
+      if (accountId) body.account_id = accountId;
+      const resp = await fetch("/api/clear-trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const data = await resp.json();
       if (data.ok) {
-        el.innerHTML = `<span style="color:#3fb950">✅ 已清空所有交易记录</span>`;
+        el.innerHTML = `<span style="color:#3fb950">✅ 已清空 ${data.deleted || 0} 条交易记录</span>`;
       } else {
         el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
       }
@@ -1287,5 +1582,300 @@ OKX 回测系统{% endblock %} {% block content %}
       el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
     }
   }
+
+  // ===== 账户管理 =====
+  let accountsData = [];
+
+  async function loadAccounts() {
+    try {
+      const resp = await fetch("/api/accounts");
+      accountsData = await resp.json();
+      renderAccountsList();
+      populateAccountDropdowns();
+    } catch (e) {
+      console.error("加载账户失败:", e);
+    }
+  }
+
+  function renderAccountsList() {
+    const el = document.getElementById("accounts-list");
+    if (!accountsData.length) {
+      el.innerHTML =
+        '<div style="color: #8b949e; font-size: 13px; padding: 12px 0">暂无配置账户，请点击下方按钮添加</div>';
+      return;
+    }
+
+    el.innerHTML = accountsData
+      .map((acc) => {
+        const envBadge = acc.is_demo
+          ? '<span class="badge badge-blue">模拟盘</span>'
+          : '<span class="badge badge-red">实盘</span>';
+        return `<div style="display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 8px; background: #0d1117">
+        <div style="flex: 1">
+          <div style="font-size: 14px; font-weight: 600; color: #c9d1d9">
+            🟢 ${acc.account_name} <span style="font-size: 12px; color: #8b949e; font-weight: 400">(${acc.account_id})</span> ${envBadge}
+          </div>
+          <div style="font-size: 12px; color: #8b949e; margin-top: 4px">
+            API Key: ${acc.api_key_masked} · 创建于 ${acc.created_at || "-"}
+          </div>
+        </div>
+        <button class="btn" onclick="editAccount('${acc.account_id}')" style="font-size: 12px; padding: 4px 12px">编辑</button>
+        <button class="btn" onclick="testAccount('${acc.account_id}')" style="font-size: 12px; padding: 4px 12px">测试</button>
+        <button class="btn btn-danger" onclick="deleteAccount('${acc.account_id}', '${acc.account_name}')" style="font-size: 12px; padding: 4px 12px">删除</button>
+      </div>`;
+      })
+      .join("");
+  }
+
+  function populateAccountDropdowns() {
+    // CSV 导入账户选择
+    const csvSel = document.getElementById("csv-account-select");
+    if (csvSel) {
+      const csvVal = csvSel.value;
+      csvSel.innerHTML = '<option value="">不绑定</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        csvSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (csvVal) csvSel.value = csvVal;
+    }
+
+    // 拉取订单账户选择
+    const fetchSel = document.getElementById("fetch-account-select");
+    if (fetchSel) {
+      const fetchVal = fetchSel.value;
+      fetchSel.innerHTML = '<option value="">手动输入 API Key</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        fetchSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (fetchVal) fetchSel.value = fetchVal;
+    }
+
+    // 清空订单账户选择
+    const clearSel = document.getElementById("clear-account-select");
+    if (clearSel) {
+      const clearVal = clearSel.value;
+      clearSel.innerHTML = '<option value="">全部账户</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        clearSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (clearVal) clearSel.value = clearVal;
+    }
+  }
+
+  function showAccountForm(accountId) {
+    document.getElementById("account-form").style.display = "block";
+    document.getElementById("btn-show-add-account").style.display = "none";
+    document.getElementById("account-form-status").textContent = "";
+
+    if (accountId) {
+      const acc = accountsData.find((a) => a.account_id === accountId);
+      if (acc) {
+        document.getElementById("account-form-title").textContent = "编辑账户";
+        document.getElementById("edit-account-id").value = accountId;
+        document.getElementById("acc-name").value = acc.account_name;
+        document.getElementById("acc-api-key").value = "";
+        document.getElementById("acc-secret").value = "";
+        document.getElementById("acc-passphrase").value = "";
+        document.getElementById("acc-demo").checked = !!acc.is_demo;
+        // 编辑时 API Key 不是必填（留空表示不修改）
+        return;
+      }
+    }
+
+    // 新增模式
+    document.getElementById("account-form-title").textContent = "添加账户";
+    document.getElementById("edit-account-id").value = "";
+    document.getElementById("acc-name").value = "";
+    document.getElementById("acc-api-key").value = "";
+    document.getElementById("acc-secret").value = "";
+    document.getElementById("acc-passphrase").value = "";
+    document.getElementById("acc-demo").checked = true;
+  }
+
+  function hideAccountForm() {
+    document.getElementById("account-form").style.display = "none";
+    document.getElementById("btn-show-add-account").style.display =
+      "inline-block";
+  }
+
+  function editAccount(accountId) {
+    showAccountForm(accountId);
+  }
+
+  async function saveAccount() {
+    const editId = document.getElementById("edit-account-id").value;
+    const name = document.getElementById("acc-name").value.trim();
+    const apiKey = document.getElementById("acc-api-key").value.trim();
+    const secret = document.getElementById("acc-secret").value.trim();
+    const passphrase = document.getElementById("acc-passphrase").value.trim();
+    const isDemo = document.getElementById("acc-demo").checked;
+    const statusEl = document.getElementById("account-form-status");
+
+    if (!name) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">账户名称不能为空</span>';
+      return;
+    }
+
+    // 新增时 API Key 必填
+    if (!editId && (!apiKey || !secret || !passphrase)) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">API Key / Secret / Passphrase 不能为空</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #8b949e">保存中...</span>';
+
+    try {
+      const body = { account_name: name, is_demo: isDemo };
+      if (apiKey) body.api_key = apiKey;
+      if (secret) body.secret = secret;
+      if (passphrase) body.passphrase = passphrase;
+
+      let resp;
+      if (editId) {
+        resp = await fetch(`/api/accounts/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch("/api/accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
+      const data = await resp.json();
+      if (data.error) {
+        statusEl.innerHTML = `<span style="color: #f85149">❌ ${data.error}</span>`;
+      } else {
+        statusEl.innerHTML = '<span style="color: #3fb950">✅ 保存成功</span>';
+        hideAccountForm();
+        loadAccounts();
+        // 同步更新全局账户选择器
+        if (typeof loadAccountSelector === "function") loadAccountSelector();
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function testAccountFromForm() {
+    const editId = document.getElementById("edit-account-id").value;
+    const statusEl = document.getElementById("account-form-status");
+
+    if (editId) {
+      // 编辑模式：测试已保存的账户
+      testAccount(editId, statusEl);
+      return;
+    }
+
+    // 新增模式：用表单输入测试
+    const apiKey = document.getElementById("acc-api-key").value.trim();
+    const secret = document.getElementById("acc-secret").value.trim();
+    const passphrase = document.getElementById("acc-passphrase").value.trim();
+    const isDemo = document.getElementById("acc-demo").checked;
+
+    if (!apiKey || !secret || !passphrase) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">请先填写 API Key / Secret / Passphrase</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #8b949e">测试中...</span>';
+    try {
+      const resp = await fetch("/api/okx/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          secret,
+          passphrase,
+          is_demo: isDemo,
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        statusEl.innerHTML = '<span style="color: #3fb950">✅ 连接成功</span>';
+      } else {
+        statusEl.innerHTML = `<span style="color: #f85149">❌ ${data.error || "连接失败"}</span>`;
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function testAccount(accountId, statusEl) {
+    const targetEl = statusEl || document.getElementById("account-form-status");
+    targetEl.innerHTML = '<span style="color: #8b949e">测试中...</span>';
+    try {
+      const resp = await fetch(`/api/accounts/${accountId}/test`, {
+        method: "POST",
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        targetEl.innerHTML = '<span style="color: #3fb950">✅ 连接成功</span>';
+        showToast("账户连接成功", "success");
+      } else {
+        targetEl.innerHTML = `<span style="color: #f85149">❌ ${data.error || "连接失败"}</span>`;
+        showToast("连接失败: " + (data.error || ""), "error");
+      }
+    } catch (e) {
+      targetEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function deleteAccount(accountId, accountName) {
+    if (
+      !confirm(
+        `确定要删除账户 "${accountName}" 吗？已关联的交易记录不会被删除。`,
+      )
+    )
+      return;
+    try {
+      const resp = await fetch(`/api/accounts/${accountId}`, {
+        method: "DELETE",
+      });
+      const data = await resp.json();
+      if (data.error) {
+        showToast("删除失败: " + data.error, "error");
+      } else {
+        showToast("账户已删除", "success");
+        loadAccounts();
+        if (typeof loadAccountSelector === "function") loadAccountSelector();
+      }
+    } catch (e) {
+      showToast("删除失败: " + e.message, "error");
+    }
+  }
+
+  function onFetchAccountChange() {
+    const val = document.getElementById("fetch-account-select").value;
+    const infoEl = document.getElementById("fetch-account-info");
+    const apiSection = document.getElementById("api-config-section");
+
+    if (val) {
+      const acc = accountsData.find((a) => a.account_id === val);
+      if (acc) {
+        const envLabel = acc.is_demo ? "模拟盘" : "实盘";
+        infoEl.textContent = `已选择: ${acc.account_name} (${envLabel}) · API Key: ${acc.api_key_masked}`;
+      }
+      // 禁用手动输入区
+      apiSection.style.opacity = "0.4";
+      apiSection.style.pointerEvents = "none";
+    } else {
+      infoEl.textContent = "";
+      apiSection.style.opacity = "1";
+      apiSection.style.pointerEvents = "auto";
+    }
+  }
+
+  // 页面加载时获取账户列表
+  loadAccounts();
 </script>
 {% endblock %}

@@ -91,7 +91,8 @@
   // ===== 加载订单分析
   async function loadOrderAnalysis() {
     try {
-      const resp = await fetch("/api/orders/analysis");
+      const q = accountQuery();
+      const resp = await fetch("/api/orders/analysis" + q);
       const data = await resp.json();
       renderHoldDuration(data.hold_duration);
       renderHeatmap(data.time_heatmap);
@@ -285,7 +286,8 @@
   // ===== 交易记录
   async function loadTrades() {
     try {
-      const resp = await fetch("/api/trades");
+      const q = accountQuery();
+      const resp = await fetch("/api/trades" + q);
       const trades = await resp.json();
       if (!Array.isArray(trades)) return;
 
@@ -346,5 +348,11 @@
   // 初始加载
   loadOrderAnalysis();
   loadTrades();
+
+  // 账户切换时重新加载
+  function onAccountChange(accountId) {
+    loadOrderAnalysis();
+    loadTrades();
+  }
 </script>
 {% endblock %}

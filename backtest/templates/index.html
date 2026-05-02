@@ -1,144 +1,209 @@
-{% extends "base.html" %}
-{% set active = "index" %}
-{% block title %}统计看板 - OKX 回测系统{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% set active = "index" %} {% block title %}统计看板 -
+OKX 回测系统{% endblock %} {% block content %}
 <div class="stats-grid" id="summary-cards">
-    <div class="stat-card"><div class="label">加载中...</div></div>
+  <div class="stat-card"><div class="label">加载中...</div></div>
 </div>
 
 <div class="card">
-    <h2>💰 核心指标</h2>
-    <div class="stats-grid" id="core-stats"></div>
+  <h2>💰 核心指标</h2>
+  <div class="stats-grid" id="core-stats"></div>
 </div>
 
 <div class="card">
-    <h2>📈 累计收益曲线</h2>
-    <div class="chart-container" id="equity-chart"></div>
+  <h2>📈 累计收益曲线</h2>
+  <div class="chart-container" id="equity-chart"></div>
 </div>
 
 <div class="two-col">
-    <div class="card">
-        <h2>📅 月度统计</h2>
-        <div class="table-scroll">
-            <table id="monthly-table">
-                <thead><tr><th>月份</th><th>笔数</th><th>胜率</th><th>总盈亏</th><th>平均盈亏</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+  <div class="card">
+    <h2>📅 月度统计</h2>
+    <div class="table-scroll">
+      <table id="monthly-table">
+        <thead>
+          <tr>
+            <th>月份</th>
+            <th>笔数</th>
+            <th>胜率</th>
+            <th>总盈亏</th>
+            <th>平均盈亏</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
-    <div class="card">
-        <h2>🪙 币种统计 (Top 10)</h2>
-        <div class="table-scroll">
-            <table id="symbol-table">
-                <thead><tr><th>币种</th><th>笔数</th><th>胜率</th><th>总盈亏</th><th>平均盈亏</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+  </div>
+  <div class="card">
+    <h2>🪙 币种统计 (Top 10)</h2>
+    <div class="table-scroll">
+      <table id="symbol-table">
+        <thead>
+          <tr>
+            <th>币种</th>
+            <th>笔数</th>
+            <th>胜率</th>
+            <th>总盈亏</th>
+            <th>平均盈亏</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
+  </div>
 </div>
 
 <div class="two-col">
-    <div class="card">
-        <h2>📊 盈亏分布</h2>
-        <div class="chart-container small" id="pnl-dist-chart"></div>
-    </div>
-    <div class="card">
-        <h2>🔥 连续统计</h2>
-        <div class="stats-grid" id="streak-stats"></div>
-    </div>
+  <div class="card">
+    <h2>📊 盈亏分布</h2>
+    <div class="chart-container small" id="pnl-dist-chart"></div>
+  </div>
+  <div class="card">
+    <h2>🔥 连续统计</h2>
+    <div class="stats-grid" id="streak-stats"></div>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-async function loadData() {
+  async function loadData() {
+    const q = accountQuery();
     const [summary, stats] = await Promise.all([
-        fetch('/api/summary').then(r => r.json()),
-        fetch('/api/basic-stats').then(r => r.json()),
+      fetch("/api/summary" + q).then((r) => r.json()),
+      fetch("/api/basic-stats" + q).then((r) => r.json()),
     ]);
 
     // 概要卡片
     const s = summary;
-    document.getElementById('summary-cards').innerHTML = `
-        <div class="stat-card"><div class="label">总交易笔数</div><div class="value neutral">${s.total||0}</div></div>
-        <div class="stat-card"><div class="label">盈利</div><div class="value positive">${s.wins||0}</div></div>
-        <div class="stat-card"><div class="label">亏损</div><div class="value negative">${s.losses||0}</div></div>
-        <div class="stat-card"><div class="label">总盈亏</div><div class="value ${(s.total_pnl||0)>=0?'positive':'negative'}">${(s.total_pnl||0).toFixed(2)}</div></div>
+    document.getElementById("summary-cards").innerHTML = `
+        <div class="stat-card"><div class="label">总交易笔数</div><div class="value neutral">${s.total || 0}</div></div>
+        <div class="stat-card"><div class="label">盈利</div><div class="value positive">${s.wins || 0}</div></div>
+        <div class="stat-card"><div class="label">亏损</div><div class="value negative">${s.losses || 0}</div></div>
+        <div class="stat-card"><div class="label">总盈亏</div><div class="value ${(s.total_pnl || 0) >= 0 ? "positive" : "negative"}">${(s.total_pnl || 0).toFixed(2)}</div></div>
     `;
 
     // 核心指标
     const b = stats.basic_stats;
-    document.getElementById('core-stats').innerHTML = `
+    document.getElementById("core-stats").innerHTML = `
         <div class="stat-card"><div class="label">胜率</div><div class="value neutral">${b.win_rate_pct}</div></div>
         <div class="stat-card"><div class="label">盈亏比</div><div class="value neutral">${b.profit_loss_ratio}</div></div>
         <div class="stat-card"><div class="label">平均盈利</div><div class="value positive">${b.avg_win.toFixed(2)}</div></div>
         <div class="stat-card"><div class="label">平均亏损</div><div class="value negative">${b.avg_loss.toFixed(2)}</div></div>
         <div class="stat-card"><div class="label">最大单笔盈利</div><div class="value positive">${b.max_win.toFixed(2)}</div></div>
         <div class="stat-card"><div class="label">最大单笔亏损</div><div class="value negative">${b.max_loss.toFixed(2)}</div></div>
-        <div class="stat-card"><div class="label">期望值</div><div class="value ${b.expectancy>=0?'positive':'negative'}">${b.expectancy.toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">期望值</div><div class="value ${b.expectancy >= 0 ? "positive" : "negative"}">${b.expectancy.toFixed(2)}</div></div>
     `;
 
     // 连续统计
     const c = stats.consecutive;
-    document.getElementById('streak-stats').innerHTML = `
+    document.getElementById("streak-stats").innerHTML = `
         <div class="stat-card"><div class="label">最大连胜</div><div class="value positive">${c.max_consecutive_wins}</div></div>
         <div class="stat-card"><div class="label">最大连亏</div><div class="value negative">${c.max_consecutive_losses}</div></div>
-        <div class="stat-card"><div class="label">当前连赢/亏</div><div class="value ${c.current_streak>=0?'positive':'negative'}">${c.current_streak>=0?c.current_streak+' 连胜':Math.abs(c.current_streak)+' 连亏'}</div></div>
+        <div class="stat-card"><div class="label">当前连赢/亏</div><div class="value ${c.current_streak >= 0 ? "positive" : "negative"}">${c.current_streak >= 0 ? c.current_streak + " 连胜" : Math.abs(c.current_streak) + " 连亏"}</div></div>
     `;
 
     // 净值曲线
     const eq = stats.equity_curve;
     if (eq.time && eq.time.length > 0) {
-        const chart = echarts.init(document.getElementById('equity-chart'));
-        chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-            grid: { left: 60, right: 20, top: 20, bottom: 40 },
-            xAxis: { type: 'category', data: eq.time.map(t => t.substring(0, 16)), axisLine: { lineStyle: { color: '#30363d' }}, axisLabel: { color: '#8b949e' }},
-            yAxis: { type: 'value', axisLine: { lineStyle: { color: '#30363d' }}, splitLine: { lineStyle: { color: '#21262d' }}, axisLabel: { color: '#8b949e' }},
-            series: [{
-                type: 'line', data: eq.equity, smooth: true, lineStyle: { width: 2 },
-                areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                    { offset: 0, color: 'rgba(31,111,235,0.3)' }, { offset: 1, color: 'rgba(31,111,235,0.02)' }
-                ])},
-                itemStyle: { color: '#1f6feb' },
-            }],
-        });
-        window.addEventListener('resize', () => chart.resize());
+      const chart = echarts.init(document.getElementById("equity-chart"));
+      chart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+        },
+        grid: { left: 60, right: 20, top: 20, bottom: 40 },
+        xAxis: {
+          type: "category",
+          data: eq.time.map((t) => t.substring(0, 16)),
+          axisLine: { lineStyle: { color: "#30363d" } },
+          axisLabel: { color: "#8b949e" },
+        },
+        yAxis: {
+          type: "value",
+          axisLine: { lineStyle: { color: "#30363d" } },
+          splitLine: { lineStyle: { color: "#21262d" } },
+          axisLabel: { color: "#8b949e" },
+        },
+        series: [
+          {
+            type: "line",
+            data: eq.equity,
+            smooth: true,
+            lineStyle: { width: 2 },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: "rgba(31,111,235,0.3)" },
+                { offset: 1, color: "rgba(31,111,235,0.02)" },
+              ]),
+            },
+            itemStyle: { color: "#1f6feb" },
+          },
+        ],
+      });
+      window.addEventListener("resize", () => chart.resize());
     }
 
     // 盈亏分布
     const dist = stats.pnl_distribution;
     if (dist.bins && dist.bins.length > 0) {
-        const distChart = echarts.init(document.getElementById('pnl-dist-chart'));
-        distChart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-            grid: { left: 50, right: 20, top: 20, bottom: 60 },
-            xAxis: { type: 'category', data: dist.bins, axisLabel: { color: '#8b949e', rotate: 45, fontSize: 10 }, axisLine: { lineStyle: { color: '#30363d' }}},
-            yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
-            series: [{ type: 'bar', data: dist.counts, itemStyle: { color: '#1f6feb' }}],
-        });
-        window.addEventListener('resize', () => distChart.resize());
+      const distChart = echarts.init(document.getElementById("pnl-dist-chart"));
+      distChart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+        },
+        grid: { left: 50, right: 20, top: 20, bottom: 60 },
+        xAxis: {
+          type: "category",
+          data: dist.bins,
+          axisLabel: { color: "#8b949e", rotate: 45, fontSize: 10 },
+          axisLine: { lineStyle: { color: "#30363d" } },
+        },
+        yAxis: {
+          type: "value",
+          axisLabel: { color: "#8b949e" },
+          splitLine: { lineStyle: { color: "#21262d" } },
+        },
+        series: [
+          { type: "bar", data: dist.counts, itemStyle: { color: "#1f6feb" } },
+        ],
+      });
+      window.addEventListener("resize", () => distChart.resize());
     }
 
     // 月度表格
-    const mt = document.querySelector('#monthly-table tbody');
-    mt.innerHTML = stats.monthly_stats.map(r => `<tr>
+    const mt = document.querySelector("#monthly-table tbody");
+    mt.innerHTML = stats.monthly_stats
+      .map(
+        (r) => `<tr>
         <td>${r.month}</td><td>${r.trades}</td>
-        <td>${(r.win_rate*100).toFixed(1)}%</td>
-        <td class="${r.total_pnl>=0?'positive':'negative'}">${r.total_pnl.toFixed(2)}</td>
-        <td class="${r.avg_pnl>=0?'positive':'negative'}">${r.avg_pnl.toFixed(2)}</td>
-    </tr>`).join('');
+        <td>${(r.win_rate * 100).toFixed(1)}%</td>
+        <td class="${r.total_pnl >= 0 ? "positive" : "negative"}">${r.total_pnl.toFixed(2)}</td>
+        <td class="${r.avg_pnl >= 0 ? "positive" : "negative"}">${r.avg_pnl.toFixed(2)}</td>
+    </tr>`,
+      )
+      .join("");
 
     // 币种表格
-    const st = document.querySelector('#symbol-table tbody');
-    st.innerHTML = stats.symbol_stats.slice(0, 10).map(r => `<tr>
+    const st = document.querySelector("#symbol-table tbody");
+    st.innerHTML = stats.symbol_stats
+      .slice(0, 10)
+      .map(
+        (r) => `<tr>
         <td>${r.symbol}</td><td>${r.trades}</td>
-        <td>${(r.win_rate*100).toFixed(1)}%</td>
-        <td class="${r.total_pnl>=0?'positive':'negative'}">${r.total_pnl.toFixed(2)}</td>
-        <td class="${r.avg_pnl>=0?'positive':'negative'}">${r.avg_pnl.toFixed(2)}</td>
-    </tr>`).join('');
-}
-loadData();
+        <td>${(r.win_rate * 100).toFixed(1)}%</td>
+        <td class="${r.total_pnl >= 0 ? "positive" : "negative"}">${r.total_pnl.toFixed(2)}</td>
+        <td class="${r.avg_pnl >= 0 ? "positive" : "negative"}">${r.avg_pnl.toFixed(2)}</td>
+    </tr>`,
+      )
+      .join("");
+  }
+  loadData();
+
+  // 账户切换时重新加载
+  function onAccountChange(accountId) {
+    loadData();
+  }
 </script>
 {% endblock %}

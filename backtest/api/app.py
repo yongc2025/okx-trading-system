@@ -22,7 +22,11 @@ from backtest.analysis.position_tier import get_position_tier_analysis
 from backtest.analysis.extreme_scan import (
     scan_all_symbols, get_scan_results, get_scan_summary, export_scan_results_csv,
 )
-from backtest.models.database import get_trade_summary, get_symbol_list
+from backtest.models.database import get_symbol_list as legacy_get_symbol_list
+from backtest.data.database import (
+    get_trade_summary, get_symbol_list, 
+    get_accounts, save_account, delete_account, get_account_detail
+)
 import io
 
 app = FastAPI(title="OKX 量化回测系统", version="1.0")
@@ -93,6 +97,33 @@ async def optimize_page(request: Request):
 
 
 # ===== 原有 API 路由 =====
+@app.get("/api/accounts")
+async def api_get_accounts():
+    """获取所有账户列表"""
+    return JSONResponse(get_accounts())
+
+
+@app.post("/api/accounts")
+async def api_save_account(request: Request):
+    """保存账户信息"""
+    body = await request.json()
+    acc_id = save_account(
+        account_name=body.get("account_name"),
+        api_key=body.get("api_key"),
+        secret=body.get("secret"),
+        passphrase=body.get("passphrase"),
+        is_demo=int(body.get("is_demo", 1))
+    )
+    return JSONResponse({"status": "success", "account_id": acc_id})
+
+
+@app.delete("/api/accounts/{account_id}")
+async def api_delete_account(account_id: str):
+    """删除账户及其数据"""
+    delete_account(account_id)
+    return JSONResponse({"status": "success"})
+
+
 @app.get("/api/summary")
 async def api_summary(account_id: str = None):
     """交易概要"""
