@@ -196,10 +196,12 @@ class OrderEngine:
     # ==========================================================
     async def close_all(self) -> list[dict]:
         """
-        一键全平
+        一键全平 (双通道并发)
         1. 查询所有持仓
-        2. 对每个持仓: 限价单 -> 超时撤单 -> 市价单
-        3. REST + WebSocket 双通道并发
+        2. 所有持仓并发平仓 (asyncio.gather)
+        3. 每个持仓: REST 限价单 + WS 成交监听双通道竞争
+           - WS 先收到成交确认 → 直接完成
+           - 超时 → 撤单 + 市价兜底
         """
         pos_resp = await self.rest.get_positions()
         if pos_resp.get("code") != "0":
@@ -210,8 +212,9 @@ class OrderEngine:
             return [{"info": "无持仓"}]
 
         timeout = self.settings.get("limit_to_market_sec")
-        results = []
 
+        # 所有持仓并发平仓
+        tasks = []
         for pos in positions:
             symbol = pos["instId"]
             direction = pos["posSide"]
@@ -224,12 +227,142 @@ class OrderEngine:
                 ticker = await self.rest.get_ticker(symbol)
                 price = float(ticker["data"][0]["last"]) if ticker.get("code") == "0" else 0
 
-            r = await self._close_position_with_timeout(
+            tasks.append(self._close_position_dual_channel(
                 symbol, direction, close_side, qty, price, timeout
-            )
-            results.append(r)
+            ))
 
-        return results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 将异常转为错误 dict
+        final = []
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                pos = positions[i]
+                final.append({
+                    "symbol": pos["instId"],
+                    "error": str(r),
+                    "method": "exception",
+                })
+            else:
+                final.append(r)
+
+        # 记录全平日志
+        self.db.log("close_all", {
+            "positions": len(positions),
+            "results": [{"symbol": r.get("symbol"), "method": r.get("method")} for r in final],
+        }, result="success")
+
+        return final
+
+    async def _close_position_dual_channel(self, symbol: str, direction: str,
+                                            close_side: str, qty: float,
+                                            price: float, timeout: float) -> dict:
+        """
+        单个持仓双通道并发平仓:
+        通道 A (REST): 限价单 → 超时撤单 → 市价兜底
+        通道 B (WS):   监听订单状态推送，收到 filled 立即确认
+        两个通道竞争: 谁先完成用谁的结果
+        """
+        t0 = time.monotonic()
+        filled_event = asyncio.Event()
+
+        # WS 监听回调: 检查是否收到该 symbol 的成交推送
+        original_on_message = self.ws.on_message if self.ws else None
+        matched_order_ids = set()
+
+        async def ws_watch_order(channel: str, data: list, arg: dict):
+            """监听订单成交推送"""
+            if channel != "orders":
+                return
+            for item in data:
+                if item.get("instId") == symbol and item.get("state") == "filled":
+                    matched_order_ids.add(item.get("ordId"))
+                    filled_event.set()
+            # 转发给原始回调
+            if original_on_message:
+                await original_on_message(channel, data, arg)
+
+        # 注入 WS 监听
+        if self.ws:
+            self.ws.on_message = ws_watch_order
+
+        try:
+            # 通道 A: REST 下限价单
+            order_result = await self.rest.place_order(
+                symbol=symbol,
+                side=close_side,
+                pos_side=direction,
+                order_type="limit",
+                sz=str(int(qty)),
+                px=str(price),
+                reduce_only=True,
+            )
+
+            order_id = None
+            if order_result.get("code") == "0" and order_result.get("data"):
+                order_id = order_result["data"][0].get("ordId")
+
+            if not order_id:
+                latency = (time.monotonic() - t0) * 1000
+                return {"symbol": symbol, "error": "限价单下单失败", "method": "limit_failed", "latency_ms": latency}
+
+            # 双通道竞争: WS 成交确认 vs 超时
+            try:
+                await asyncio.wait_for(filled_event.wait(), timeout=timeout)
+                # WS 通道先完成 — 订单已成交
+                latency = (time.monotonic() - t0) * 1000
+                self.db.log("close", {
+                    "symbol": symbol, "direction": direction,
+                    "order_id": order_id, "channel": "ws_confirmed",
+                }, symbol=symbol, latency_ms=latency, result="success")
+                self._close_local_trades(symbol, direction, price)
+                return {"symbol": symbol, "method": "limit+ws_confirm", "latency_ms": latency}
+
+            except asyncio.TimeoutError:
+                # 超时: 撤单 + 市价兜底
+                pass
+
+            # 检查是否已成交 (WS 可能漏推送)
+            pending = await self.rest.get_pending_orders()
+            still_pending = False
+            if pending.get("code") == "0":
+                for o in pending.get("data", []):
+                    if o.get("ordId") == order_id:
+                        still_pending = True
+                        break
+
+            if still_pending:
+                # 撤单 + 市价强平
+                await self.rest.cancel_order(symbol, order_id)
+                market_result = await self.rest.place_order(
+                    symbol=symbol,
+                    side=close_side,
+                    pos_side=direction,
+                    order_type="market",
+                    sz=str(int(qty)),
+                    reduce_only=True,
+                )
+                latency = (time.monotonic() - t0) * 1000
+                self.db.log("close", {
+                    "symbol": symbol, "direction": direction,
+                    "limit_order_id": order_id, "fallback": "market",
+                }, symbol=symbol, latency_ms=latency, result="success")
+                self._close_local_trades(symbol, direction, price)
+                return {"symbol": symbol, "method": "limit->market", "latency_ms": latency}
+            else:
+                # 限价单已成交 (但 WS 没推送)
+                latency = (time.monotonic() - t0) * 1000
+                self.db.log("close", {
+                    "symbol": symbol, "direction": direction,
+                    "order_id": order_id, "note": "filled_without_ws",
+                }, symbol=symbol, latency_ms=latency, result="success")
+                self._close_local_trades(symbol, direction, price)
+                return {"symbol": symbol, "method": "limit", "latency_ms": latency}
+
+        finally:
+            # 恢复原始 WS 回调
+            if self.ws and original_on_message:
+                self.ws.on_message = original_on_message
 
     async def _close_position_with_timeout(self, symbol: str, direction: str,
                                             close_side: str, qty: float,
