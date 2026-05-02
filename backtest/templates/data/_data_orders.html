@@ -1,0 +1,274 @@
+  // ===== 从交易所拉取订单
+  async function fetchOrders() {
+    const btn = document.getElementById("btn-fetch-orders");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const status = document.getElementById("order-fetch-status");
+    status.textContent = "拉取中...";
+    status.style.color = "#8b949e";
+
+    const instType = document.getElementById("order-inst-type").value;
+    const accountId = document.getElementById("fetch-account-select").value;
+
+    // 如果选了账户但没选手动输入，校验
+    if (!accountId) {
+      const apiKey = document.getElementById("cfg-api-key").value.trim();
+      if (!apiKey) {
+        status.textContent = "❌ 请选择账户或填写 API Key";
+        status.style.color = "#f85149";
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    try {
+      const body = { inst_type: instType };
+      if (accountId) {
+        body.account_id = accountId;
+      } else {
+        body.api_key = document.getElementById("cfg-api-key").value;
+        body.secret = document.getElementById("cfg-secret").value;
+        body.passphrase = document.getElementById("cfg-passphrase").value;
+        body.is_demo = document.getElementById("cfg-demo").checked;
+      }
+
+      const resp = await fetch("/api/orders/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (data.error) {
+        status.textContent = "❌ " + data.error;
+        status.style.color = "#f85149";
+      } else {
+        let msg = `✅ 成交 ${data.total_fills} 条，配对 ${data.paired_trades} 笔交易`;
+        if (accountId) {
+          const acc = accountsData.find((a) => a.account_id === accountId);
+          msg += ` (已绑定: ${acc ? acc.account_name : accountId})`;
+        }
+        status.textContent = msg;
+        status.style.color = "#3fb950";
+      }
+    } catch (e) {
+      status.textContent = "❌ " + e.message;
+      status.style.color = "#f85149";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ===== K 线下载
+  let pollTimer = null;
+
+  async function startDownload() {
+    const btn = document.getElementById("btn-download");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "下载中...";
+
+    const symbols = Array.from(subscribed);
+    const barCheckboxes = document.querySelectorAll(
+      "#bar-checkboxes input:checked",
+    );
+    const bars = Array.from(barCheckboxes).map((cb) => cb.value);
+
+    const dateMode = document.querySelector(
+      'input[name="date-mode"]:checked',
+    ).value;
+    const days = parseInt(document.getElementById("dl-days").value) || 90;
+    const start_date =
+      dateMode === "custom"
+        ? document.getElementById("dl-start-date").value
+        : null;
+    const end_date =
+      dateMode === "custom"
+        ? document.getElementById("dl-end-date").value
+        : null;
+
+    if (!symbols.length) {
+      alert("请至少订阅一个币种");
+      btn.disabled = false;
+      btn.textContent = "开始下载";
+      return;
+    }
+    if (!bars.length) {
+      alert("请至少选择一个 K 线周期");
+      btn.disabled = false;
+      btn.textContent = "开始下载";
+      return;
+    }
+
+    document.getElementById("download-progress").style.display = "block";
+    document.getElementById("dl-status-text").textContent = "下载中...";
+    document.getElementById("dl-errors").textContent = "";
+
+    fetch("/api/kline/download", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols, bars, days, start_date, end_date }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error)
+          document.getElementById("dl-errors").textContent =
+            "错误: " + data.error;
+        loadKlineInfo();
+      })
+      .catch((e) => {
+        document.getElementById("dl-errors").textContent =
+          "请求失败: " + e.message;
+      })
+      .finally(() => {
+        btn.disabled = false;
+        btn.textContent = "开始下载";
+        if (pollTimer) clearInterval(pollTimer);
+      });
+
+    pollTimer = setInterval(async () => {
+      try {
+        const resp = await fetch("/api/kline/progress");
+        updateProgressTable(await resp.json());
+      } catch (e) {}
+    }, 1500);
+  }
+
+  function updateProgressTable(progress) {
+    const tbody = document.getElementById("progress-body");
+    let totalTasks = 0,
+      doneTasks = 0;
+    const rows = [];
+    for (const [symbol, bars] of Object.entries(progress)) {
+      for (const [bar, info] of Object.entries(bars)) {
+        totalTasks++;
+        if (info.status === "done") doneTasks++;
+        const statusColor =
+          info.status === "done"
+            ? "#3fb950"
+            : info.status === "error"
+              ? "#f85149"
+              : "#58a6ff";
+        const statusText =
+          info.status === "done"
+            ? "✅ 完成"
+            : info.status === "error"
+              ? "❌ 错误"
+              : info.status === "downloading"
+                ? "⏳ 下载中"
+                : "⏸ 等待";
+        rows.push(
+          `<tr><td>${symbol}</td><td><span class="badge badge-blue">${bar}</span></td><td style="color:${statusColor}">${statusText}</td><td>${info.downloaded}</td><td>${info.total}</td></tr>`,
+        );
+      }
+    }
+    tbody.innerHTML = rows.join("");
+    document.getElementById("dl-count").textContent =
+      `${doneTasks}/${totalTasks}`;
+    document.getElementById("dl-bar").style.width =
+      totalTasks > 0 ? (doneTasks / totalTasks) * 100 + "%" : "0%";
+    if (doneTasks === totalTasks && totalTasks > 0) {
+      document.getElementById("dl-status-text").textContent = "✅ 全部完成";
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+  }
+
+  // ===== CSV
+  function downloadTemplate() {
+    window.open("/api/csv/template", "_blank");
+  }
+
+  async function importCSV() {
+    if (!debounce('importCSV', _doImportCSV)) return;
+  }
+  async function _doImportCSV() {
+    const fileInput = document.getElementById("csv-file");
+    if (!fileInput.files.length) {
+      alert("请选择 CSV 文件");
+      return;
+    }
+    const accountId = document.getElementById("csv-account-select").value;
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+    const el = document.getElementById("csv-result");
+    el.innerHTML = '<span style="color:#8b949e">导入中...</span>';
+    try {
+      let url = "/api/csv/import";
+      if (accountId) url += `?account_id=${accountId}`;
+      const resp = await fetch(url, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (data.error) {
+        el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
+      } else {
+        let html = `<span style="color:#3fb950">✅ 导入 ${data.imported} 条，跳过 ${data.skipped} 条</span>`;
+        if (accountId) {
+          const acc = accountsData.find((a) => a.account_id === accountId);
+          html += `<br><span style="color:#8b949e">已绑定到账户: ${acc ? acc.account_name : accountId}</span>`;
+        }
+        if (data.errors && data.errors.length)
+          html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
+        el.innerHTML = html;
+      }
+    } catch (e) {
+      el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function clearTrades() {
+    if (!debounce('clearTrades', _doClearTrades)) return;
+  }
+  async function _doClearTrades() {
+    const accountId = document.getElementById("clear-account-select").value;
+    const scopeText = accountId
+      ? `账户 "${accountsData.find((a) => a.account_id === accountId)?.account_name || accountId}" 的交易记录`
+      : "所有交易记录";
+    if (!confirm(`确定要清空${scopeText}吗？此操作不可恢复！`)) return;
+    const el = document.getElementById("clear-result");
+    el.innerHTML = '<span style="color:#8b949e">清空中...</span>';
+    try {
+      const body = {};
+      if (accountId) body.account_id = accountId;
+      const resp = await fetch("/api/clear-trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        el.innerHTML = `<span style="color:#3fb950">✅ 已清空 ${data.deleted || 0} 条交易记录</span>`;
+      } else {
+        el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
+      }
+    } catch (e) {
+      el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function backfillFloatLoss() {
+    if (!debounce('backfillFloatLoss', _doBackfillFloatLoss)) return;
+  }
+  async function _doBackfillFloatLoss() {
+    const el = document.getElementById("backfill-result");
+    el.innerHTML = '<span style="color:#8b949e">正在补算浮亏数据...</span>';
+    try {
+      const resp = await fetch("/api/backfill-float-loss", { method: "POST" });
+      const data = await resp.json();
+      if (data.error) {
+        el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
+      } else {
+        let html = `<span style="color:#3fb950">✅ 补算完成：更新 ${data.updated} 条，跳过 ${data.skipped} 条</span>`;
+        if (data.message)
+          html += `<br><span style="color:#8b949e">${data.message}</span>`;
+        if (data.errors && data.errors.length)
+          html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
+        el.innerHTML = html;
+      }
+    } catch (e) {
+      el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
+    }
+  }

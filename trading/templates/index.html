@@ -991,31 +991,52 @@
     <div class="modal-overlay hidden" id="connectModal">
       <div class="modal">
         <h2>🔗 连接 OKX</h2>
-        <div class="form-group">
-          <label>API 密钥 (API Key)</label>
-          <input type="text" id="apiKey" placeholder="请输入 OKX API Key" />
+
+        <!-- 已保存凭证选择 -->
+        <div id="savedCredsSection" style="margin-bottom:16px;">
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-weight:500;">已保存的凭证</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="savedCredSelect" style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;height:40px;">
+              <option value="">-- 手动输入 --</option>
+            </select>
+            <button class="modal-btn" style="width:auto;padding:10px 16px;" onclick="connectFromSaved()">连接</button>
+          </div>
+          <div id="savedCredInfo" style="font-size:12px;color:var(--text-secondary);margin-top:4px;"></div>
         </div>
-        <div class="form-group">
-          <label>私钥 (Secret Key)</label>
-          <input
-            type="password"
-            id="apiSecret"
-            placeholder="请输入 OKX Secret Key"
-          />
+
+        <div style="text-align:center;color:var(--text-secondary);font-size:12px;margin:12px 0;position:relative;">
+          <span style="background:var(--bg-secondary);padding:0 12px;position:relative;z-index:1;">或手动输入</span>
+          <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:var(--border);z-index:0;"></div>
         </div>
-        <div class="form-group">
-          <label>确认密码/口令 (Passphrase)</label>
-          <input
-            type="password"
-            id="apiPassphrase"
-            placeholder="请输入 OKX Passphrase"
-          />
+
+        <!-- 手动输入 -->
+        <div id="manualCredSection">
+          <div class="form-group">
+            <label>API 密钥 (API Key)</label>
+            <input type="text" id="apiKey" placeholder="请输入 OKX API Key" />
+          </div>
+          <div class="form-group">
+            <label>私钥 (Secret Key)</label>
+            <input
+              type="password"
+              id="apiSecret"
+              placeholder="请输入 OKX Secret Key"
+            />
+          </div>
+          <div class="form-group">
+            <label>确认密码/口令 (Passphrase)</label>
+            <input
+              type="password"
+              id="apiPassphrase"
+              placeholder="请输入 OKX Passphrase"
+            />
+          </div>
+          <div class="modal-checkbox">
+            <input type="checkbox" id="apiDemo" />
+            <label for="apiDemo">模拟盘</label>
+          </div>
+          <button class="modal-btn" onclick="doConnect()">连接</button>
         </div>
-        <div class="modal-checkbox">
-          <input type="checkbox" id="apiDemo" />
-          <label for="apiDemo">模拟盘</label>
-        </div>
-        <button class="modal-btn" onclick="doConnect()">连接</button>
       </div>
     </div>
 
@@ -1030,6 +1051,7 @@
         <span class="status-label" id="wsLabel">WS 未连接</span>
         <div class="status-right">
           <span class="status-label" id="balanceLabel"></span>
+          <a href="/settings" style="color:var(--text-secondary);text-decoration:none;font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;">⚙️ 设置</a>
           <button class="btn-lock" onclick="doLock()">🔒 锁定</button>
         </div>
       </div>
@@ -1172,6 +1194,11 @@
             <span class="hotkey-hint">[F1]</span>
           </button>
 
+          <!-- 加仓按钮 -->
+          <button class="order-btn long" id="btnAddPos" onclick="addPosition()" style="background:var(--accent-blue);margin-top:8px;">
+            ➕ 加仓 (25%)
+          </button>
+
           <div class="divider"></div>
 
           <!-- 一键全平 -->
@@ -1229,6 +1256,8 @@
         maxLeverShort: 2,
         balance: 0,
         calcQty: 1,
+        settings: {},
+        confirmBeforeClose: false,
       };
       let ws = null;
 
@@ -1237,12 +1266,16 @@
       // ============================================================
       async function init() {
         try {
-          const resp = await api("/api/session");
+          // 同时加载会话状态和配置
+          const [sessionResp] = await Promise.all([
+            api("/api/session"),
+            loadAppSettings(),
+          ]);
           document.getElementById("loadingStatus").style.display = "none";
-          if (resp.first_run) {
+          if (sessionResp.first_run) {
             show("registerForm");
             hide("loginForm");
-          } else if (!resp.unlocked) {
+          } else if (!sessionResp.unlocked) {
             hide("registerForm");
             show("loginForm");
             setTimeout(
@@ -1250,7 +1283,7 @@
               100,
             );
           } else {
-            enterApp(resp.connected, resp.ws_connected);
+            enterApp(sessionResp.connected, sessionResp.ws_connected);
           }
         } catch (e) {
           document.getElementById("loadingStatus").textContent =
@@ -1259,6 +1292,77 @@
             "var(--accent-red)";
           console.error("Init failed:", e);
         }
+      }
+
+      // 加载后端配置并应用
+      async function loadAppSettings() {
+        try {
+          const settings = await api("/api/settings");
+          S.settings = settings;
+          S.leverage = settings.leverage_long || 3;
+          S.maxLeverLong = settings.leverage_long_max || 3;
+          S.maxLeverShort = settings.leverage_short_max || 2;
+          S.confirmBeforeClose = settings.confirm_before_close || false;
+          document.getElementById("leverageValue").textContent = S.leverage;
+        } catch (e) {
+          console.error("加载配置失败:", e);
+        }
+      }
+
+      // 加载已保存的凭证列表到连接弹窗
+      async function loadSavedCredentials() {
+        try {
+          const creds = await api("/api/credentials");
+          const sel = document.getElementById("savedCredSelect");
+          if (!sel) return;
+          sel.innerHTML = '<option value="">-- 手动输入 --</option>';
+          (creds || []).forEach((c) => {
+            const envLabel = c.is_demo ? "模拟" : "实盘";
+            sel.innerHTML += `<option value="${c.label}">${c.label} (${envLabel})</option>`;
+          });
+          // 如果有已保存凭证，默认选中第一个
+          if (creds && creds.length > 0) {
+            sel.value = creds[0].label;
+            onSavedCredChange();
+          }
+        } catch (e) {
+          console.error("加载凭证列表失败:", e);
+        }
+      }
+
+      // 选中已保存凭证时显示信息
+      function onSavedCredChange() {
+        const val = document.getElementById("savedCredSelect").value;
+        const info = document.getElementById("savedCredInfo");
+        const manual = document.getElementById("manualCredSection");
+        if (val) {
+          info.textContent = "将使用已保存的凭证连接";
+          manual.style.opacity = "0.3";
+          manual.style.pointerEvents = "none";
+        } else {
+          info.textContent = "";
+          manual.style.opacity = "1";
+          manual.style.pointerEvents = "auto";
+        }
+      }
+
+      // 绑定事件
+      document.getElementById("savedCredSelect").addEventListener("change", onSavedCredChange);
+
+      // 用已保存凭证连接
+      async function connectFromSaved() {
+        const label = document.getElementById("savedCredSelect").value;
+        if (!label) return toast("请选择一个已保存的凭证", "error");
+        const resp = await api("/api/credentials/connect", "POST", { label });
+        if (resp.error) return toast(resp.error, "error");
+        document.getElementById("connectModal").classList.add("hidden");
+        S.connected = true;
+        updateStatus();
+        connectWS();
+        refreshPositions();
+        setInterval(refreshPositions, 5000);
+        loadFavorites();
+        toast("已连接: " + label, "success");
       }
 
       // ============================================================
@@ -1313,6 +1417,7 @@
           setInterval(refreshPositions, 5000);
           loadFavorites();
         } else {
+          loadSavedCredentials();
           document.getElementById("connectModal").classList.remove("hidden");
         }
       }
@@ -1340,6 +1445,7 @@
         refreshPositions();
         setInterval(refreshPositions, 5000);
         loadFavorites();
+        loadSavedCredentials();
         toast("OKX 连接成功", "success");
       }
 
@@ -1444,6 +1550,7 @@
           order_type: S.priceMode === "market" ? "market" : "limit",
           quantity: qty,
           notional: S.orderPrice * qty,
+          position_tier: S.tier,
         });
         if (resp.error) return toast(resp.error, "error");
         toast(
@@ -1454,10 +1561,24 @@
 
       async function closeAll() {
         if (!S.connected) return toast("未连接", "error");
-        if (!confirm("确认一键全平所有持仓？")) return;
+        if (S.confirmBeforeClose && !confirm("确认一键全平所有持仓？")) return;
         const resp = await api("/api/close-all", "POST");
         if (resp.error) return toast(resp.error, "error");
         toast(`全平完成: ${resp.results?.length || 0} 个持仓`, "success");
+        refreshPositions();
+      }
+
+      async function addPosition() {
+        if (!S.symbol) return toast("请先选择币种", "error");
+        if (!S.orderPrice) return toast("等待价格数据", "error");
+        if (!S.connected) return toast("未连接 OKX", "error");
+        const resp = await api("/api/add-position", "POST", {
+          symbol: S.symbol,
+          direction: S.direction,
+          price: S.orderPrice,
+        });
+        if (resp.error) return toast(resp.error, "error");
+        toast(`✅ 加仓成功 (${resp.latency_ms?.toFixed(0) || "?"}ms)`, "success");
         refreshPositions();
       }
 
@@ -1475,6 +1596,20 @@
         document.getElementById("wsLabel").textContent = S.wsConnected
           ? "WS 已连接"
           : "WS 未连接";
+
+        // 断线遮罩
+        let overlay = document.getElementById("disconnectOverlay");
+        if (!S.connected) {
+          if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "disconnectOverlay";
+            overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:900;display:flex;align-items:center;justify-content:center;";
+            overlay.innerHTML = '<div style="text-align:center;"><div style="font-size:48px;margin-bottom:16px;">⚠️</div><div style="font-size:18px;font-weight:600;margin-bottom:8px;">连接已断开</div><div style="color:var(--text-secondary);font-size:13px;">正在尝试重新连接...</div></div>';
+            document.body.appendChild(overlay);
+          }
+        } else if (overlay) {
+          overlay.remove();
+        }
       }
 
       function updatePrice(price) {
@@ -1668,7 +1803,8 @@
 
         const allocMap = { first: 0.5, add1: 0.25, add2: 0.25 };
         const alloc = allocMap[S.tier] || 0.5;
-        const contractVal = 10;
+        // 使用动态合约面值（从 instruments 获取），默认 10 USDT
+        const contractVal = S.contractVal || 10;
         const totalNotional = S.balance * alloc * S.leverage;
         S.calcQty = Math.max(1, Math.floor(totalNotional / contractVal));
 
@@ -1697,6 +1833,9 @@
         // 加载 TradingView K线图
         loadTradingView(symbol);
 
+        // 获取合约面值
+        loadContractVal(symbol);
+
         // 订阅价格
         fetch(`/api/ticker/${symbol}`)
           .then((r) => r.json())
@@ -1704,6 +1843,22 @@
             if (data?.data?.[0]?.last)
               updatePrice(parseFloat(data.data[0].last));
           });
+      }
+
+      // 从 instruments 获取合约面值
+      async function loadContractVal(symbol) {
+        try {
+          const resp = await api("/api/instruments");
+          if (resp && resp.code === "0") {
+            const inst = resp.data.find((i) => i.instId === symbol);
+            if (inst && inst.ctVal) {
+              S.contractVal = parseFloat(inst.ctVal);
+              calculatePlannedQty();
+            }
+          }
+        } catch (e) {
+          console.error("获取合约面值失败:", e);
+        }
       }
 
       function loadTradingView(symbol) {

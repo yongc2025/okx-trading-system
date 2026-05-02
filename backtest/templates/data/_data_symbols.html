@@ -1,0 +1,146 @@
+  // ===== 币种管理 =====
+  let ALL_SYMBOLS = [
+    "BTC-USDT-SWAP",
+    "ETH-USDT-SWAP",
+    "SOL-USDT-SWAP",
+    "XRP-USDT-SWAP",
+    "DOGE-USDT-SWAP",
+    "ADA-USDT-SWAP",
+    "AVAX-USDT-SWAP",
+    "LINK-USDT-SWAP",
+    "DOT-USDT-SWAP",
+    "MATIC-USDT-SWAP",
+    "UNI-USDT-SWAP",
+    "LTC-USDT-SWAP",
+    "ATOM-USDT-SWAP",
+    "NEAR-USDT-SWAP",
+    "APT-USDT-SWAP",
+    "ARB-USDT-SWAP",
+    "OP-USDT-SWAP",
+    "FIL-USDT-SWAP",
+    "AAVE-USDT-SWAP",
+    "MKR-USDT-SWAP",
+    "TRX-USDT-SWAP",
+    "TON-USDT-SWAP",
+    "PEPE-USDT-SWAP",
+    "SHIB-USDT-SWAP",
+    "WLD-USDT-SWAP",
+    "INJ-USDT-SWAP",
+    "TIA-USDT-SWAP",
+    "SUI-USDT-SWAP",
+    "SEI-USDT-SWAP",
+    "JUP-USDT-SWAP",
+    "ORDI-USDT-SWAP",
+    "1000SATS-USDT-SWAP",
+  ];
+
+  const subscribed = new Set(["BTC-USDT-SWAP", "ETH-USDT-SWAP"]);
+
+  function refreshSymbolList() {
+    ALL_SYMBOLS = [...new Set(ALL_SYMBOLS)].sort();
+  }
+
+  function renderDropdown(filter = "") {
+    const el = document.getElementById("symbol-dropdown");
+    const q = filter.toUpperCase().trim();
+    const filtered = q ? ALL_SYMBOLS.filter((s) => s.includes(q)) : ALL_SYMBOLS;
+
+    if (!filtered.length) {
+      const custom = filter.trim().toUpperCase();
+      if (custom && !ALL_SYMBOLS.includes(custom)) {
+        const full = custom.endsWith("-USDT-SWAP")
+          ? custom
+          : custom + "-USDT-SWAP";
+        el.innerHTML = `<div class="symbol-option" onclick="addCustomSymbol('${full}')">
+                <span class="star" style="opacity:0.2">⭐</span>
+                <span class="sym-name">添加 "${full}"</span>
+            </div>`;
+      } else {
+        el.innerHTML =
+          '<div style="padding:12px;color:#8b949e;font-size:13px">无匹配结果</div>';
+      }
+      return;
+    }
+
+    el.innerHTML = filtered
+      .map((sym) => {
+        const on = subscribed.has(sym);
+        return `<div class="symbol-option" data-sym="${sym}">
+            <span class="star ${on ? "on" : ""}" onclick="event.stopPropagation();toggleStar('${sym}')">⭐</span>
+            <span class="sym-name" onclick="toggleStar('${sym}')">${sym.replace("-USDT-SWAP", "")}</span>
+            <span class="sym-badge">永续</span>
+        </div>`;
+      })
+      .join("");
+  }
+
+  function renderTags() {
+    const el = document.getElementById("symbol-tags");
+    if (subscribed.size === 0) {
+      el.innerHTML =
+        '<span style="font-size:12px;color:#8b949e">未订阅任何币种，搜索并点击 ⭐ 订阅</span>';
+      return;
+    }
+    el.innerHTML = Array.from(subscribed)
+      .map(
+        (sym) =>
+          `<span class="symbol-tag">
+            <span class="star">⭐</span>
+            ${sym.replace("-USDT-SWAP", "")}
+            <span class="remove" onclick="removeStar('${sym}')">✕</span>
+        </span>`,
+      )
+      .join("");
+  }
+
+  function toggleStar(sym) {
+    if (subscribed.has(sym)) {
+      subscribed.delete(sym);
+    } else {
+      subscribed.add(sym);
+    }
+    renderTags();
+    const dropdown = document.getElementById("symbol-dropdown");
+    if (dropdown.classList.contains("open")) {
+      renderDropdown(document.getElementById("symbol-search").value);
+    }
+  }
+
+  function removeStar(sym) {
+    subscribed.delete(sym);
+    renderTags();
+    const dropdown = document.getElementById("symbol-dropdown");
+    if (dropdown.classList.contains("open")) {
+      renderDropdown(document.getElementById("symbol-search").value);
+    }
+  }
+
+  function addCustomSymbol(sym) {
+    if (!ALL_SYMBOLS.includes(sym)) {
+      ALL_SYMBOLS.push(sym);
+      refreshSymbolList();
+    }
+    subscribed.add(sym);
+    document.getElementById("symbol-search").value = "";
+    renderTags();
+    closeDropdown();
+  }
+
+  function closeDropdown() {
+    document.getElementById("symbol-dropdown").classList.remove("open");
+  }
+
+  const searchInput = document.getElementById("symbol-search");
+  searchInput.addEventListener("focus", () => {
+    renderDropdown(searchInput.value);
+    document.getElementById("symbol-dropdown").classList.add("open");
+  });
+  searchInput.addEventListener("input", () => {
+    renderDropdown(searchInput.value);
+    document.getElementById("symbol-dropdown").classList.add("open");
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".symbol-selector-wrap")) closeDropdown();
+  });
+
+  renderTags();

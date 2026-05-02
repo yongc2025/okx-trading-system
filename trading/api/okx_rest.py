@@ -48,31 +48,6 @@ class OKXRestClient:
         )
         return base64.b64encode(mac.digest()).decode("ascii")
 
-    async def _request(self, method: str, path: str, params: Optional[dict] = None, body: Optional[dict] = None) -> dict:
-        """发送 REST 请求 (带自动时间戳格式化)"""
-        client = await self._get_client()
-        
-        # OKX 推荐使用 ISO 8601 格式: 2020-12-08T09:08:49.070Z
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        timestamp = now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        
-        body_str = ""
-        if body:
-            import json
-            body_str = json.dumps(body)
-
-        headers = {
-            "OK-ACCESS-KEY": self.api_key,
-            "OK-ACCESS-SIGN": self._sign(timestamp, method, path, body_str),
-            "OK-ACCESS-TIMESTAMP": timestamp,
-            "OK-ACCESS-PASSPHRASE": self.passphrase,
-            "Content-Type": "application/json",
-        }
-        if "pap" in self.base_url or "test网" in self.base_url: # 或者是根据 is_demo 判断
-             # 如果是模拟盘环境，有时需要额外 header，虽然大部分时间自动识别
-             pass
-
     def _headers(self, method: str, path: str, body: str = "") -> dict:
         from datetime import datetime, timezone
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -148,7 +123,6 @@ class OKXRestClient:
     async def get_books(self, symbol: str, sz: int = 20) -> dict:
         """获取深度数据"""
         return await self._request("GET", "/api/v5/market/books", {"instId": symbol, "sz": str(sz)})
-        return await self._request("GET", "/api/v5/public/instruments", {"instType": inst_type})
 
     # ==========================================================
     # 交易接口 (需鉴权)

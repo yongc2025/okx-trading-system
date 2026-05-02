@@ -141,11 +141,11 @@ class OKXClient:
         return data
 
     async def connect(self) -> bool:
-        """测试连接，返回是否成功"""
+        """测试连接，通过签名接口验证 API 凭据是否有效"""
         try:
-            result = await self._request("GET", "/api/v5/public/time")
-            server_ts = result.get("data", [{}])[0].get("ts", "")
-            logger.info(f"OKX 连接成功，服务器时间戳: {server_ts}")
+            # 使用需要签名的接口来验证凭据，而非公开接口
+            result = await self._request("GET", "/api/v5/account/balance", signed=True)
+            logger.info("OKX 连接成功，凭据验证通过")
             return True
         except Exception as e:
             logger.error(f"OKX 连接失败: {e}")

@@ -163,6 +163,15 @@
       .btn:hover {
         background: #30363d;
       }
+      .btn:active {
+        transform: scale(0.97);
+        filter: brightness(0.85);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
       .btn-primary {
         background: #1f6feb;
         border-color: #1f6feb;
@@ -171,10 +180,33 @@
       .btn-primary:hover {
         background: #388bfd;
       }
+      .btn-primary:active {
+        background: #1158c7;
+        transform: scale(0.97);
+      }
+      .btn-primary:disabled {
+        background: #1f6feb;
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
       .btn-danger {
         background: #da3633;
         border-color: #da3633;
         color: #fff;
+      }
+      .btn-danger:hover {
+        background: #f85149;
+      }
+      .btn-danger:active {
+        background: #b62324;
+        transform: scale(0.97);
+      }
+      .btn-danger:disabled {
+        background: #da3633;
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
       }
 
       .filters {

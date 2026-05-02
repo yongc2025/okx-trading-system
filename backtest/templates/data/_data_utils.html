@@ -1,0 +1,52 @@
+  // ===== 通用防抖工具 =====
+  const _debounceTimers = {};
+  function debounce(key, fn, delay = 1500) {
+    if (_debounceTimers[key]) return false;
+    _debounceTimers[key] = true;
+    fn();
+    setTimeout(() => { delete _debounceTimers[key]; }, delay);
+    return true;
+  }
+
+  // 带 loading 态的防抖：自动禁用按钮，完成后恢复
+  function withButton(btnOrId, fn) {
+    const btn = typeof btnOrId === 'string' ? document.getElementById(btnOrId) : btnOrId;
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = '处理中...';
+    Promise.resolve(fn()).finally(() => {
+      btn.disabled = false;
+      btn.textContent = origText;
+    });
+  }
+
+  // ===== Tab 切换 =====
+  function switchOrderTab(tab) {
+    document
+      .querySelectorAll(".tab-btn")
+      .forEach((b) => b.classList.remove("active"));
+    document
+      .querySelectorAll(".tab-panel")
+      .forEach((p) => p.classList.remove("active"));
+
+    if (tab === "csv") {
+      document.querySelectorAll(".tab-btn")[0].classList.add("active");
+      document.getElementById("tab-csv").classList.add("active");
+    } else {
+      document.querySelectorAll(".tab-btn")[1].classList.add("active");
+      document.getElementById("tab-exchange").classList.add("active");
+    }
+  }
+
+  // ===== API 配置折叠 =====
+  let apiConfigExpanded = false;
+  function toggleApiConfig() {
+    const section = document.getElementById("api-config-section");
+    apiConfigExpanded = !apiConfigExpanded;
+    if (apiConfigExpanded) {
+      section.classList.add("open");
+    } else {
+      section.classList.remove("open");
+    }
+  }

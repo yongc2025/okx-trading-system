@@ -1,0 +1,308 @@
+
+  // ===== 账户管理 =====
+  let accountsData = [];
+
+  async function loadAccounts() {
+    try {
+      const resp = await fetch("/api/accounts");
+      accountsData = await resp.json();
+      renderAccountsList();
+      populateAccountDropdowns();
+    } catch (e) {
+      console.error("加载账户失败:", e);
+    }
+  }
+
+  function renderAccountsList() {
+    const el = document.getElementById("accounts-list");
+    if (!accountsData.length) {
+      el.innerHTML =
+        '<div style="color: #8b949e; font-size: 13px; padding: 12px 0">暂无配置账户，请点击下方按钮添加</div>';
+      return;
+    }
+
+    el.innerHTML = accountsData
+      .map((acc) => {
+        const envBadge = acc.is_demo
+          ? '<span class="badge badge-blue">模拟盘</span>'
+          : '<span class="badge badge-red">实盘</span>';
+        return `<div style="display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 8px; background: #0d1117">
+        <div style="flex: 1">
+          <div style="font-size: 14px; font-weight: 600; color: #c9d1d9">
+            🟢 ${acc.account_name} <span style="font-size: 12px; color: #8b949e; font-weight: 400">(${acc.account_id})</span> ${envBadge}
+          </div>
+          <div style="font-size: 12px; color: #8b949e; margin-top: 4px">
+            API Key: ${acc.api_key_masked} · 创建于 ${acc.created_at || "-"}
+          </div>
+        </div>
+        <button class="btn" onclick="editAccount('${acc.account_id}')" style="font-size: 12px; padding: 4px 12px">编辑</button>
+        <button class="btn" onclick="testAccount('${acc.account_id}')" style="font-size: 12px; padding: 4px 12px">测试</button>
+        <button class="btn btn-danger" onclick="deleteAccount('${acc.account_id}', '${acc.account_name}')" style="font-size: 12px; padding: 4px 12px">删除</button>
+      </div>`;
+      })
+      .join("");
+  }
+
+  function populateAccountDropdowns() {
+    // CSV 导入账户选择
+    const csvSel = document.getElementById("csv-account-select");
+    if (csvSel) {
+      const csvVal = csvSel.value;
+      csvSel.innerHTML = '<option value="">不绑定</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        csvSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (csvVal) csvSel.value = csvVal;
+    }
+
+    // 拉取订单账户选择
+    const fetchSel = document.getElementById("fetch-account-select");
+    if (fetchSel) {
+      const fetchVal = fetchSel.value;
+      fetchSel.innerHTML = '<option value="">手动输入 API Key</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        fetchSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (fetchVal) fetchSel.value = fetchVal;
+    }
+
+    // 清空订单账户选择
+    const clearSel = document.getElementById("clear-account-select");
+    if (clearSel) {
+      const clearVal = clearSel.value;
+      clearSel.innerHTML = '<option value="">全部账户</option>';
+      accountsData.forEach((acc) => {
+        const envLabel = acc.is_demo ? "模拟" : "实盘";
+        clearSel.innerHTML += `<option value="${acc.account_id}">${acc.account_name} (${envLabel})</option>`;
+      });
+      if (clearVal) clearSel.value = clearVal;
+    }
+  }
+
+  function showAccountForm(accountId) {
+    document.getElementById("account-form").style.display = "block";
+    document.getElementById("btn-show-add-account").style.display = "none";
+    document.getElementById("account-form-status").textContent = "";
+
+    if (accountId) {
+      const acc = accountsData.find((a) => a.account_id === accountId);
+      if (acc) {
+        document.getElementById("account-form-title").textContent = "编辑账户";
+        document.getElementById("edit-account-id").value = accountId;
+        document.getElementById("acc-name").value = acc.account_name;
+        document.getElementById("acc-api-key").value = "";
+        document.getElementById("acc-secret").value = "";
+        document.getElementById("acc-passphrase").value = "";
+        document.getElementById("acc-demo").checked = !!acc.is_demo;
+        // 编辑时 API Key 不是必填（留空表示不修改）
+        return;
+      }
+    }
+
+    // 新增模式
+    document.getElementById("account-form-title").textContent = "添加账户";
+    document.getElementById("edit-account-id").value = "";
+    document.getElementById("acc-name").value = "";
+    document.getElementById("acc-api-key").value = "";
+    document.getElementById("acc-secret").value = "";
+    document.getElementById("acc-passphrase").value = "";
+    document.getElementById("acc-demo").checked = true;
+  }
+
+  function hideAccountForm() {
+    document.getElementById("account-form").style.display = "none";
+    document.getElementById("btn-show-add-account").style.display =
+      "inline-block";
+  }
+
+  function editAccount(accountId) {
+    showAccountForm(accountId);
+  }
+
+  async function saveAccount() {
+    if (!debounce('saveAccount', _doSaveAccount)) return;
+  }
+  async function _doSaveAccount() {
+    const editId = document.getElementById("edit-account-id").value;
+    const name = document.getElementById("acc-name").value.trim();
+    const apiKey = document.getElementById("acc-api-key").value.trim();
+    const secret = document.getElementById("acc-secret").value.trim();
+    const passphrase = document.getElementById("acc-passphrase").value.trim();
+    const isDemo = document.getElementById("acc-demo").checked;
+    const statusEl = document.getElementById("account-form-status");
+
+    if (!name) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">账户名称不能为空</span>';
+      return;
+    }
+
+    // 新增时 API Key 必填
+    if (!editId && (!apiKey || !secret || !passphrase)) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">API Key / Secret / Passphrase 不能为空</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #8b949e">保存中...</span>';
+
+    try {
+      const body = { account_name: name, is_demo: isDemo };
+      if (apiKey) body.api_key = apiKey;
+      if (secret) body.secret = secret;
+      if (passphrase) body.passphrase = passphrase;
+
+      let resp;
+      if (editId) {
+        resp = await fetch(`/api/accounts/${editId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        resp = await fetch("/api/accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
+      const data = await resp.json();
+      if (data.error) {
+        statusEl.innerHTML = `<span style="color: #f85149">❌ ${data.error}</span>`;
+      } else {
+        statusEl.innerHTML = '<span style="color: #3fb950">✅ 保存成功</span>';
+        hideAccountForm();
+        loadAccounts();
+        // 同步更新全局账户选择器
+        if (typeof loadAccountSelector === "function") loadAccountSelector();
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function testAccountFromForm() {
+    if (!debounce('testAccountFromForm', _doTestAccountFromForm)) return;
+  }
+  async function _doTestAccountFromForm() {
+    const editId = document.getElementById("edit-account-id").value;
+    const statusEl = document.getElementById("account-form-status");
+
+    if (editId) {
+      // 编辑模式：测试已保存的账户
+      testAccount(editId, statusEl);
+      return;
+    }
+
+    // 新增模式：用表单输入测试
+    const apiKey = document.getElementById("acc-api-key").value.trim();
+    const secret = document.getElementById("acc-secret").value.trim();
+    const passphrase = document.getElementById("acc-passphrase").value.trim();
+    const isDemo = document.getElementById("acc-demo").checked;
+
+    if (!apiKey || !secret || !passphrase) {
+      statusEl.innerHTML =
+        '<span style="color: #f85149">请先填写 API Key / Secret / Passphrase</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color: #8b949e">测试中...</span>';
+    try {
+      const resp = await fetch("/api/okx/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: apiKey,
+          secret,
+          passphrase,
+          is_demo: isDemo,
+        }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        statusEl.innerHTML = '<span style="color: #3fb950">✅ 连接成功</span>';
+      } else {
+        statusEl.innerHTML = `<span style="color: #f85149">❌ ${data.error || "连接失败"}</span>`;
+      }
+    } catch (e) {
+      statusEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function testAccount(accountId, statusEl) {
+    const key = 'testAccount_' + accountId;
+    if (!debounce(key, () => _doTestAccount(accountId, statusEl))) return;
+  }
+  async function _doTestAccount(accountId, statusEl) {
+    const targetEl = statusEl || document.getElementById("account-form-status");
+    targetEl.innerHTML = '<span style="color: #8b949e">测试中...</span>';
+    try {
+      const resp = await fetch(`/api/accounts/${accountId}/test`, {
+        method: "POST",
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        targetEl.innerHTML = '<span style="color: #3fb950">✅ 连接成功</span>';
+        showToast("账户连接成功", "success");
+      } else {
+        targetEl.innerHTML = `<span style="color: #f85149">❌ ${data.error || "连接失败"}</span>`;
+        showToast("连接失败: " + (data.error || ""), "error");
+      }
+    } catch (e) {
+      targetEl.innerHTML = `<span style="color: #f85149">❌ ${e.message}</span>`;
+    }
+  }
+
+  async function deleteAccount(accountId, accountName) {
+    if (!debounce('deleteAccount_' + accountId, () => _doDeleteAccount(accountId, accountName))) return;
+  }
+  async function _doDeleteAccount(accountId, accountName) {
+    if (
+      !confirm(
+        `确定要删除账户 "${accountName}" 吗？已关联的交易记录不会被删除。`,
+      )
+    )
+      return;
+    try {
+      const resp = await fetch(`/api/accounts/${accountId}`, {
+        method: "DELETE",
+      });
+      const data = await resp.json();
+      if (data.error) {
+        showToast("删除失败: " + data.error, "error");
+      } else {
+        showToast("账户已删除", "success");
+        loadAccounts();
+        if (typeof loadAccountSelector === "function") loadAccountSelector();
+      }
+    } catch (e) {
+      showToast("删除失败: " + e.message, "error");
+    }
+  }
+
+  function onFetchAccountChange() {
+    const val = document.getElementById("fetch-account-select").value;
+    const infoEl = document.getElementById("fetch-account-info");
+    const apiSection = document.getElementById("api-config-section");
+
+    if (val) {
+      const acc = accountsData.find((a) => a.account_id === val);
+      if (acc) {
+        const envLabel = acc.is_demo ? "模拟盘" : "实盘";
+        infoEl.textContent = `已选择: ${acc.account_name} (${envLabel}) · API Key: ${acc.api_key_masked}`;
+      }
+      // 禁用手动输入区
+      apiSection.style.opacity = "0.4";
+      apiSection.style.pointerEvents = "none";
+    } else {
+      infoEl.textContent = "";
+      apiSection.style.opacity = "1";
+      apiSection.style.pointerEvents = "auto";
+    }
+  }
+
+  // 页面加载时获取账户列表
+  loadAccounts();

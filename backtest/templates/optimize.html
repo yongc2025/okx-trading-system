@@ -59,8 +59,21 @@
 
 {% block scripts %}
 <script>
+const _debounceTimers = {};
+function debounce(key, fn, delay = 1500) {
+    if (_debounceTimers[key]) return false;
+    _debounceTimers[key] = true;
+    fn();
+    setTimeout(() => { delete _debounceTimers[key]; }, delay);
+    return true;
+}
+
 async function runOptimize() {
     const btn = document.getElementById('btn-optimize');
+    if (btn.disabled) return;
+    debounce('runOptimize', () => _doRunOptimize(btn));
+}
+async function _doRunOptimize(btn) {
     const status = document.getElementById('opt-status');
     btn.disabled = true;
     status.textContent = '计算中（可能需要较长时间）...';

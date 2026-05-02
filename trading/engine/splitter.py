@@ -33,6 +33,8 @@ def split_order(symbol: str, side: str, pos_side: str,
     # 平均拆为 N 单，每单约 400~800U
     avg_size = threshold * 0.7  # 每单目标约 560U
     n_splits = max(2, int(notional_usdt / avg_size))
+    # 张数不足时，减少拆单数
+    n_splits = min(n_splits, int(total_qty))
 
     random_min = settings.get("split_random_min")
     random_max = settings.get("split_random_max")

@@ -88,10 +88,23 @@
 
 {% block scripts %}
 <script>
+const _debounceTimers = {};
+function debounce(key, fn, delay = 1500) {
+    if (_debounceTimers[key]) return false;
+    _debounceTimers[key] = true;
+    fn();
+    setTimeout(() => { delete _debounceTimers[key]; }, delay);
+    return true;
+}
+
 let simResults = null;
 
 async function runSimulation() {
-    const btn = event.target;
+    debounce('runSimulation', _doRunSimulation);
+}
+async function _doRunSimulation() {
+    const btn = document.querySelector('button[onclick="runSimulation()"]');
+    if (!btn || btn.disabled) return;
     const status = document.getElementById('sim-status');
     btn.disabled = true;
     status.textContent = '模拟中...';

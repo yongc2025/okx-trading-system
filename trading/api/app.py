@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from trading.config import BASE_DIR
+from trading.config import BASE_DIR, PROXY_URL
 from trading.data.database import Database
 from trading.core.settings import Settings
 from trading.core.credentials import CredentialManager
@@ -311,16 +311,25 @@ async def api_place_order(request: Request):
     quantity = int(body["quantity"])
     notional = float(body.get("notional", quantity * price))
     order_type = body.get("order_type", "limit")
+    position_tier = body.get("position_tier", "first")
 
     # 风控校验
     balance_resp = await rest_client.get_balance()
     available = position_mgr.get_available_balance(balance_resp)
     leverage = settings.get(f"leverage_{direction}")
-    ok, msg = risk_ctrl.validate_order(direction, leverage, available, "first")
+    ok, msg = risk_ctrl.validate_order(direction, leverage, available, position_tier)
     if not ok:
         return JSONResponse({"error": msg}, status_code=400)
 
-    result = await order_engine.place_order(symbol, direction, price, quantity, notional, order_type=order_type)
+    # 真实下发杠杆到交易所
+    try:
+        pos_side = "long" if direction == "long" else "short"
+        await rest_client.set_leverage(symbol, leverage, pos_side=pos_side)
+    except Exception as e:
+        log.warning(f"设置杠杆失败: {e}")
+
+    result = await order_engine.place_order(symbol, direction, price, quantity, notional,
+                                             position_tier=position_tier, order_type=order_type)
 
     # 自动挂止损 (市价单也需要止损)
     await stoploss_engine.attach_stoploss(symbol, direction, price, quantity)
@@ -418,6 +427,12 @@ async def api_get_settings():
     return settings.all()
 
 
+@app.get("/api/settings/schema")
+async def api_get_settings_schema():
+    """返回配置项 Schema（类型、默认值、描述）"""
+    return settings.schema()
+
+
 @app.post("/api/settings")
 async def api_set_settings(request: Request):
     body = await request.json()
@@ -427,6 +442,14 @@ async def api_set_settings(request: Request):
         except ValueError:
             pass
     return settings.all()
+
+
+# ============================================================
+# 页面路由
+# ============================================================
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    return templates.TemplateResponse("settings.html", {"request": request})
 
 
 # ============================================================
@@ -472,6 +495,91 @@ async def api_delete_credential(label: str):
     cred_mgr = CredentialManager(db, session_mgr.password)
     cred_mgr.delete(label)
     return {"status": "ok"}
+
+
+@app.post("/api/credentials/test")
+async def api_test_credential(request: Request):
+    """测试 API 凭证是否有效"""
+    check = _require_unlocked()
+    if check:
+        return check
+
+    body = await request.json()
+    label = body.get("label")
+
+    cred_mgr = CredentialManager(db, session_mgr.password)
+
+    if label:
+        # 测试已保存的凭证
+        creds = cred_mgr.load(label)
+        if not creds:
+            return JSONResponse({"error": f"凭证 '{label}' 不存在"}, status_code=404)
+    else:
+        # 测试手动输入的凭证
+        creds = {
+            "api_key": body.get("api_key", ""),
+            "secret": body.get("secret", ""),
+            "passphrase": body.get("passphrase", ""),
+            "is_demo": body.get("is_demo", False),
+        }
+        if not all([creds["api_key"], creds["secret"], creds["passphrase"]]):
+            return JSONResponse({"error": "缺少 API 凭证"}, status_code=400)
+
+    try:
+        from trading.api.okx_rest import OKXRestClient
+        client = OKXRestClient(
+            creds["api_key"], creds["secret"], creds["passphrase"], creds["is_demo"]
+        )
+        balance = await client.get_balance()
+        await client.close()
+
+        code = balance.get("code")
+        if code == "0":
+            # 提取 USDT 余额
+            usdt_balance = 0
+            for d in balance.get("data", []):
+                for detail in d.get("details", []):
+                    if detail.get("ccy") == "USDT":
+                        usdt_balance = float(detail.get("availBal", 0))
+            return {"ok": True, "usdt_balance": usdt_balance}
+        else:
+            error_map = {
+                "50101": "API Key 与环境不匹配（实盘/模拟盘）",
+                "50105": "Passphrase 错误",
+                "50110": "API Key 错误或不存在",
+                "50100": "Secret Key 签名错误",
+            }
+            msg = error_map.get(code, f"OKX 错误({code}): {balance.get('msg', '')}")
+            return {"ok": False, "error": msg}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/credentials/connect")
+async def api_connect_from_saved(request: Request):
+    """用已保存的凭证连接 OKX"""
+    check = _require_unlocked()
+    if check:
+        return check
+
+    body = await request.json()
+    label = body.get("label", "default")
+
+    cred_mgr = CredentialManager(db, session_mgr.password)
+    creds = cred_mgr.load(label)
+    if not creds:
+        return JSONResponse({"error": f"凭证 '{label}' 不存在"}, status_code=404)
+
+    try:
+        await _init_okx(creds["api_key"], creds["secret"], creds["passphrase"], creds["is_demo"])
+        balance = await rest_client.get_balance()
+        code = balance.get("code")
+        if code == "0":
+            return {"status": "ok", "label": label}
+        else:
+            return JSONResponse({"error": f"连接失败: {balance.get('msg', '')}"}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ============================================================

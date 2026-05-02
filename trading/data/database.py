@@ -133,6 +133,13 @@ class Database:
     # 止损单
     # ----------------------------------------------------------
     def insert_stoploss(self, **kwargs) -> int:
+        allowed_columns = {
+            "symbol", "direction", "trigger_price", "order_price",
+            "order_type", "okx_order_id", "status", "parent_sl_id"
+        }
+        invalid = set(kwargs.keys()) - allowed_columns
+        if invalid:
+            raise ValueError(f"非法列名: {invalid}")
         columns = ", ".join(kwargs.keys())
         placeholders = ", ".join(["?"] * len(kwargs))
         with self.transaction():
@@ -143,6 +150,13 @@ class Database:
             return cur.lastrowid
 
     def update_stoploss(self, sl_id: int, **kwargs):
+        allowed_columns = {
+            "trigger_price", "order_price", "order_type",
+            "okx_order_id", "status", "parent_sl_id"
+        }
+        invalid = set(kwargs.keys()) - allowed_columns
+        if invalid:
+            raise ValueError(f"非法列名: {invalid}")
         sets = ", ".join(f"{k}=?" for k in kwargs)
         with self.transaction():
             self.execute(
@@ -172,6 +186,13 @@ class Database:
     # 持仓快照
     # ----------------------------------------------------------
     def insert_snapshot(self, **kwargs):
+        allowed_columns = {
+            "symbol", "direction", "entry_price", "mark_price",
+            "quantity", "unrealized_pnl", "unrealized_ratio"
+        }
+        invalid = set(kwargs.keys()) - allowed_columns
+        if invalid:
+            raise ValueError(f"非法列名: {invalid}")
         columns = ", ".join(kwargs.keys())
         placeholders = ", ".join(["?"] * len(kwargs))
         with self.transaction():

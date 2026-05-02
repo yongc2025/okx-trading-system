@@ -1,0 +1,139 @@
+  // ===== 日期模式切换
+  function toggleDateMode() {
+    const mode = document.querySelector(
+      'input[name="date-mode"]:checked',
+    ).value;
+    document.getElementById("custom-date-fields").style.display =
+      mode === "custom" ? "flex" : "none";
+    document.getElementById("dl-days").disabled = mode === "custom";
+  }
+  const now = new Date();
+  document.getElementById("dl-end-date").value = now
+    .toISOString()
+    .split("T")[0];
+  const start90 = new Date(now.getTime() - 90 * 86400000);
+  document.getElementById("dl-start-date").value = start90
+    .toISOString()
+    .split("T")[0];
+
+  // ===== K 线数据概览（带筛选 + 分页）
+  let klineData = [];
+  let klineFiltered = [];
+  let klinePage = 1;
+  const KLINE_PAGE_SIZE = 10;
+
+  async function loadKlineInfo() {
+    try {
+      const resp = await fetch("/api/kline-info");
+      klineData = await resp.json();
+      document.getElementById("kline-info-loading").style.display = "none";
+      document.getElementById("kline-info-table").style.display = "block";
+      filterKlineInfo();
+    } catch (e) {
+      document.getElementById("kline-info-loading").textContent =
+        "加载失败: " + e.message;
+    }
+  }
+
+  function filterKlineInfo() {
+    const q = document
+      .getElementById("kline-filter")
+      .value.toUpperCase()
+      .trim();
+    klineFiltered = q
+      ? klineData.filter((r) => r.symbol.toUpperCase().includes(q))
+      : klineData;
+    klinePage = 1;
+    renderKlineInfo();
+  }
+
+  function renderKlineInfo() {
+    const tbody = document.getElementById("kline-info-body");
+    const countEl = document.getElementById("kline-filter-count");
+    const totalPages = Math.max(
+      1,
+      Math.ceil(klineFiltered.length / KLINE_PAGE_SIZE),
+    );
+
+    if (!klineFiltered.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
+      countEl.textContent = "";
+      updateKlinePagination(0, 0);
+      return;
+    }
+
+    countEl.textContent = `共 ${klineFiltered.length} 条`;
+    const start = (klinePage - 1) * KLINE_PAGE_SIZE;
+    const pageData = klineFiltered.slice(start, start + KLINE_PAGE_SIZE);
+
+    tbody.innerHTML = pageData
+      .map(
+        (r) => `<tr>
+            <td>${r.symbol}</td>
+            <td><span class="badge badge-blue">${r.bar}</span></td>
+            <td>${(r.first_time || "").substring(0, 16)}</td>
+            <td>${(r.last_time || "").substring(0, 16)}</td>
+            <td>${r.count}</td>
+        </tr>`,
+      )
+      .join("");
+
+    updateKlinePagination(klinePage, totalPages);
+  }
+
+  function updateKlinePagination(page, totalPages) {
+    document.getElementById("kline-prev").disabled = page <= 1;
+    document.getElementById("kline-next").disabled = page >= totalPages;
+    document.getElementById("kline-page-info").textContent =
+      totalPages > 0 ? `第 ${page} / ${totalPages} 页` : "";
+  }
+
+  function klinePageChange(delta) {
+    const totalPages = Math.ceil(klineFiltered.length / KLINE_PAGE_SIZE);
+    klinePage = Math.max(1, Math.min(totalPages, klinePage + delta));
+    renderKlineInfo();
+  }
+
+  loadKlineInfo();
+
+  // ===== OKX 连接测试 =====
+  async function testConnection() {
+    debounce('testConn', () => withButton(null, _doTestConnection));
+  }
+  async function _doTestConnection() {
+    const el = document.getElementById("conn-status");
+    el.textContent = "测试中...";
+    el.style.color = "#8b949e";
+    try {
+      const resp = await fetch("/api/okx/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: document.getElementById("cfg-api-key").value,
+          secret: document.getElementById("cfg-secret").value,
+          passphrase: document.getElementById("cfg-passphrase").value,
+          is_demo: document.getElementById("cfg-demo").checked,
+        }),
+      });
+      const data = await resp.json();
+      const badge = document.getElementById("api-config-badge");
+      if (data.ok) {
+        el.textContent = "✅ 连接成功";
+        el.style.color = "#3fb950";
+        badge.textContent = "已连接";
+        badge.className = "api-badge ok";
+        badge.style.display = "inline";
+      } else {
+        el.textContent = "❌ " + (data.error || "连接失败");
+        el.style.color = "#f85149";
+        badge.textContent = "连接失败";
+        badge.className = "api-badge";
+        badge.style.display = "inline";
+      }
+    } catch (e) {
+      el.textContent = "❌ 请求失败";
+      el.style.color = "#f85149";
+    }
+  }
+

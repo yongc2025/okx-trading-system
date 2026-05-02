@@ -71,9 +71,22 @@ class OrderEngine:
 
         latency = (time.monotonic() - t0) * 1000
 
-        # 记录成交
+        # 检查所有子单是否成功
+        failed_orders = [r for r in results if r.get("code") != "0"]
+        if failed_orders:
+            error_msgs = [r.get("msg", "unknown") for r in failed_orders]
+            log.error(f"下单失败: {symbol} {direction} - {'; '.join(error_msgs)}")
+            self.db.log("order", {
+                "action": "place_failed",
+                "symbol": symbol,
+                "direction": direction,
+                "errors": error_msgs,
+            }, symbol=symbol, result="fail")
+            return {"error": f"下单失败: {'; '.join(error_msgs)}"}
+
+        # 记录成交（所有子单成功才写本地）
         okx_order_id = None
-        if results and results[0].get("code") == "0" and results[0].get("data"):
+        if results and results[0].get("data"):
             okx_order_id = results[0]["data"][0].get("ordId")
 
         trade_id = self.db.insert_trade(
@@ -267,13 +280,42 @@ class OrderEngine:
                 "symbol": symbol, "direction": direction,
                 "limit_order_id": order_id, "fallback": "market",
             }, symbol=symbol, latency_ms=latency, result="success")
+            # 更新本地交易记录
+            self._close_local_trades(symbol, direction, price)
             return {"symbol": symbol, "method": "limit->market", "latency_ms": latency}
 
         latency = (time.monotonic() - t0) * 1000
         self.db.log("close", {
             "symbol": symbol, "direction": direction, "order_id": order_id,
         }, symbol=symbol, latency_ms=latency, result="success")
+        # 更新本地交易记录
+        self._close_local_trades(symbol, direction, price)
         return {"symbol": symbol, "method": "limit", "latency_ms": latency}
+
+    def _close_local_trades(self, symbol: str, direction: str, close_price: float):
+        """平仓后更新本地交易记录状态"""
+        from datetime import datetime
+        open_trades = self.db.fetchall(
+            "SELECT * FROM trade_records WHERE symbol=? AND direction=? AND status='open'",
+            (symbol, direction),
+        )
+        for trade in open_trades:
+            # 计算盈亏
+            entry_price = trade.get("open_price") or trade.get("price", 0)
+            qty = trade.get("quantity", 0)
+            leverage = trade.get("leverage", 1)
+            if direction == "long":
+                pnl = (close_price - entry_price) * qty * leverage
+            else:
+                pnl = (entry_price - close_price) * qty * leverage
+            self.db.update_trade(
+                trade["id"],
+                status="closed",
+                pnl=round(pnl, 2),
+                closed_at=datetime.utcnow().isoformat(),
+            )
+        if open_trades:
+            log.info(f"本地记录已更新: {symbol} {direction} {len(open_trades)} 笔已关闭")
 
     # ==========================================================
     # 工具

@@ -101,6 +101,15 @@
 
 {% block scripts %}
 <script>
+const _debounceTimers = {};
+function debounce(key, fn, delay = 1500) {
+    if (_debounceTimers[key]) return false;
+    _debounceTimers[key] = true;
+    fn();
+    setTimeout(() => { delete _debounceTimers[key]; }, delay);
+    return true;
+}
+
 let currentLimit = 100;
 
 function getThreshold() {
@@ -149,6 +158,9 @@ async function startScan() {
 }
 
 async function clearScanData() {
+    if (!debounce('clearScanData', _doClearScanData)) return;
+}
+async function _doClearScanData() {
     if (!confirm('确定清空所有极端行情扫描数据？此操作不可恢复。')) return;
     try {
         const resp = await fetch('/api/scan/clear', { method: 'POST' });
