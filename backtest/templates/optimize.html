@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% set active = "optimize" %}
+{% block title %}参数优化 - OKX 回测系统{% endblock %}
+
+{% block content %}
+<!-- 参数设置 -->
+<div class="card">
+    <h2>🎯 参数网格搜索</h2>
+    <div class="filters" style="margin-bottom:0">
+        <label style="color:#8b949e;font-size:13px">止损比例 (%，逗号分隔):</label>
+        <input type="text" id="opt-sl-list" value="5,10,15,20" style="width:200px">
+        <label style="color:#8b949e;font-size:13px">止盈比例 (%，逗号分隔):</label>
+        <input type="text" id="opt-tp-list" value="5,10,20,50" style="width:200px">
+        <label style="color:#8b949e;font-size:13px">K线周期:</label>
+        <select id="opt-bar">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1H">1H</option>
+        </select>
+        <button class="btn btn-primary" id="btn-optimize" onclick="runOptimize()">开始优化</button>
+        <span id="opt-status" style="font-size:13px;margin-left:8px"></span>
+    </div>
+</div>
+
+<!-- 最优参数 -->
+<div class="card" id="optimal-card" style="display:none">
+    <h2>🏆 最优参数组合</h2>
+    <div class="stats-grid" id="optimal-stats"></div>
+</div>
+
+<!-- 热力图 -->
+<div class="card">
+    <h2>📊 参数热力图（止损 × 止盈 → 总盈亏）</h2>
+    <div class="chart-container" id="opt-heatmap"></div>
+</div>
+
+<!-- 排行榜 -->
+<div class="card">
+    <h2>📋 参数组合排行榜</h2>
+    <div class="table-scroll">
+        <table id="opt-rank-table">
+            <thead><tr>
+                <th>排名</th><th>止损%</th><th>止盈%</th><th>总笔数</th><th>胜率</th>
+                <th>总盈亏</th><th>平均盈亏</th><th>盈亏比</th><th>最大回撤</th>
+                <th>止损触发</th><th>止盈触发</th><th>超时</th>
+            </tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 3D 曲面图（可选） -->
+<div class="card">
+    <h2>📈 收益曲面图</h2>
+    <div class="chart-container" id="opt-surface"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runOptimize() {
+    const btn = document.getElementById('btn-optimize');
+    const status = document.getElementById('opt-status');
+    btn.disabled = true;
+    status.textContent = '计算中（可能需要较长时间）...';
+    status.style.color = '#8b949e';
+
+    const slList = document.getElementById('opt-sl-list').value
+        .split(',').map(s => parseFloat(s.trim())/100).filter(Boolean);
+    const tpList = document.getElementById('opt-tp-list').value
+        .split(',').map(s => parseFloat(s.trim())/100).filter(Boolean);
+    const klineBar = document.getElementById('opt-bar').value;
+
+    if (!slList.length || !tpList.length) {
+        alert('请输入止损和止盈比例');
+        btn.disabled = false;
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/optimize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                stoploss_ratios: slList,
+                takeprofit_ratios: tpList,
+                kline_bar: klineBar,
+            }),
+        });
+        const data = await resp.json();
+
+        if (data.error) {
+            status.textContent = '❌ ' + data.error;
+            status.style.color = '#f85149';
+            return;
+        }
+
+        status.textContent = `✅ 完成，共 ${data.results.length} 组参数`;
+        status.style.color = '#3fb950';
+
+        renderOptimal(data.optimal);
+        renderHeatmap(data.results, slList.map(v=>v*100), tpList.map(v=>v*100));
+        renderRanking(data.results);
+        renderSurface(data.results, slList.map(v=>v*100), tpList.map(v=>v*100));
+    } catch(e) {
+        status.textContent = '❌ ' + e.message;
+        status.style.color = '#f85149';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderOptimal(opt) {
+    if (!opt) return;
+    document.getElementById('optimal-card').style.display = 'block';
+    document.getElementById('optimal-stats').innerHTML = `
+        <div class="stat-card"><div class="label">止损比例</div><div class="value neutral">${(opt.stoploss_pct*100).toFixed(0)}%</div></div>
+        <div class="stat-card"><div class="label">止盈比例</div><div class="value neutral">${(opt.takeprofit_pct*100).toFixed(0)}%</div></div>
+        <div class="stat-card"><div class="label">总盈亏</div><div class="value ${opt.total_pnl>=0?'positive':'negative'}">${opt.total_pnl.toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">胜率</div><div class="value neutral">${(opt.win_rate*100).toFixed(1)}%</div></div>
+        <div class="stat-card"><div class="label">盈亏比</div><div class="value neutral">${opt.profit_loss_ratio}</div></div>
+        <div class="stat-card"><div class="label">最大回撤</div><div class="value negative">${opt.max_drawdown.toFixed(2)}</div></div>
+    `;
+}
+
+function renderHeatmap(results, slLabels, tpLabels) {
+    if (!results.length) return;
+
+    // 构建矩阵
+    const matrix = {};
+    let maxPnl = -Infinity, minPnl = Infinity;
+    results.forEach(r => {
+        const sl = (r.stoploss_pct*100).toFixed(0);
+        const tp = (r.takeprofit_pct*100).toFixed(0);
+        matrix[`${sl}_${tp}`] = r.total_pnl;
+        maxPnl = Math.max(maxPnl, r.total_pnl);
+        minPnl = Math.min(minPnl, r.total_pnl);
+    });
+
+    const data = [];
+    slLabels.forEach((sl, i) => {
+        tpLabels.forEach((tp, j) => {
+            const val = matrix[`${sl.toFixed(0)}_${tp.toFixed(0)}`] || 0;
+            data.push([j, i, Math.round(val * 100) / 100]);
+        });
+    });
+
+    const chart = echarts.init(document.getElementById('opt-heatmap'));
+    chart.setOption({
+        tooltip: {
+            backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' },
+            formatter: p => `止损 ${slLabels[p.value[1]]}% / 止盈 ${tpLabels[p.value[0]]}%<br>总盈亏: ${p.value[2]}`
+        },
+        grid: { left: 80, right: 80, top: 20, bottom: 60 },
+        xAxis: {
+            type: 'category', data: tpLabels.map(v => v+'%'),
+            name: '止盈', nameTextStyle: { color: '#8b949e' },
+            axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}
+        },
+        yAxis: {
+            type: 'category', data: slLabels.map(v => v+'%'),
+            name: '止损', nameTextStyle: { color: '#8b949e' },
+            axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}
+        },
+        visualMap: {
+            min: minPnl, max: maxPnl, calculable: true, orient: 'vertical',
+            right: 0, top: 'center', textStyle: { color: '#8b949e' },
+            inRange: { color: ['#f85149', '#21262d', '#3fb950'] },
+        },
+        series: [{
+            type: 'heatmap', data,
+            label: { show: true, color: '#c9d1d9', fontSize: 11, formatter: p => p.value[2] },
+            emphasis: { itemStyle: { shadowBlur: 10 }},
+        }],
+    });
+    window.addEventListener('resize', () => chart.resize());
+}
+
+function renderRanking(results) {
+    // 按总盈亏排序
+    const sorted = [...results].sort((a,b) => b.total_pnl - a.total_pnl);
+    const tbody = document.querySelector('#opt-rank-table tbody');
+    tbody.innerHTML = sorted.map((r, i) => {
+        const td = r.trigger_distribution || {};
+        return `<tr>
+            <td>${i+1}</td>
+            <td>${(r.stoploss_pct*100).toFixed(0)}%</td>
+            <td>${(r.takeprofit_pct*100).toFixed(0)}%</td>
+            <td>${r.total_trades}</td>
+            <td>${(r.win_rate*100).toFixed(1)}%</td>
+            <td class="${r.total_pnl>=0?'positive':'negative'}">${r.total_pnl.toFixed(2)}</td>
+            <td class="${r.avg_pnl>=0?'positive':'negative'}">${r.avg_pnl.toFixed(2)}</td>
+            <td>${r.profit_loss_ratio}</td>
+            <td class="negative">${r.max_drawdown.toFixed(2)}</td>
+            <td>${td.stoploss||0}</td>
+            <td>${td.takeprofit||0}</td>
+            <td>${td.timeout||0}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderSurface(results, slLabels, tpLabels) {
+    if (!results.length) return;
+
+    const matrix = {};
+    results.forEach(r => {
+        const sl = (r.stoploss_pct*100).toFixed(0);
+        const tp = (r.takeprofit_pct*100).toFixed(0);
+        matrix[`${sl}_${tp}`] = r.total_pnl;
+    });
+
+    // 用柱状图展示各止损比例下的盈亏对比
+    const series = slLabels.map(sl => ({
+        name: `止损 ${sl}%`,
+        type: 'bar',
+        data: tpLabels.map(tp => matrix[`${sl.toFixed(0)}_${tp.toFixed(0)}`] || 0),
+    }));
+
+    const chart = echarts.init(document.getElementById('opt-surface'));
+    chart.setOption({
+        tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+        legend: { data: series.map(s => s.name), textStyle: { color: '#8b949e' }},
+        grid: { left: 60, right: 20, top: 40, bottom: 40 },
+        xAxis: {
+            type: 'category', data: tpLabels.map(v => 'TP '+v+'%'),
+            axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}
+        },
+        yAxis: {
+            type: 'value', name: '总盈亏',
+            axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}
+        },
+        series,
+    });
+    window.addEventListener('resize', () => chart.resize());
+}
+</script>
+{% endblock %}

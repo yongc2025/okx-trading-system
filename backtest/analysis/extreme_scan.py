@@ -170,6 +170,11 @@ def scan_all_symbols(
     }
 
 
+_SCAN_VALID_ORDER_FIELDS = frozenset({
+    'change_pct', 'scan_time', 'volume', 'symbol', 'open_price', 'close_price',
+})
+
+
 def get_scan_results(
     conn: sqlite3.Connection = None,
     symbol: str = None,
@@ -188,9 +193,13 @@ def get_scan_results(
         direction: 方向筛选 (surge/plunge)
         min_pct: 最小涨跌幅绝对值
         limit: 返回条数
-        order_by: 排序字段
+        order_by: 排序字段（白名单校验）
         order_desc: 是否降序
     """
+    # 白名单校验，防止 SQL 注入
+    if order_by not in _SCAN_VALID_ORDER_FIELDS:
+        order_by = 'change_pct'
+
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
