@@ -1,309 +1,350 @@
-{% extends "base.html" %}
-{% set active = "orders" %}
-{% block title %}订单分析 - OKX 回测系统{% endblock %}
-
-{% block content %}
-<!-- 订单下载 -->
-<div class="card">
-    <h2>📥 从 OKX 下载订单</h2>
-    <div class="filters" style="margin-bottom:0">
-        <label style="color:#8b949e;font-size:13px">产品类型:</label>
-        <select id="order-inst-type">
-            <option value="SWAP" selected>永续合约 (SWAP)</option>
-            <option value="SPOT">现货 (SPOT)</option>
-            <option value="FUTURES">交割合约 (FUTURES)</option>
-        </select>
-        <button class="btn btn-primary" id="btn-fetch-orders" onclick="fetchOrders()">拉取成交记录</button>
-        <span id="order-fetch-status" style="font-size:13px;margin-left:8px"></span>
-    </div>
-</div>
-
-<!-- 订单概要 -->
-<div class="stats-grid" id="order-summary">
-    <div class="stat-card"><div class="label">点击上方按钮拉取数据</div></div>
-</div>
-
+{% extends "base.html" %} {% set active = "orders" %} {% block title %}订单分析
+- OKX 回测系统{% endblock %} {% block content %}
 <!-- 持仓时长分析 -->
 <div class="two-col">
-    <div class="card">
-        <h2>⏱ 持仓时长分桶</h2>
-        <div class="table-scroll">
-            <table id="hold-duration-table">
-                <thead><tr><th>时长区间</th><th>笔数</th><th>胜率</th><th>总盈亏</th><th>平均盈亏</th><th>平均持仓(分钟)</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+  <div class="card">
+    <h2>⏱ 持仓时长分桶</h2>
+    <div class="table-scroll">
+      <table id="hold-duration-table">
+        <thead>
+          <tr>
+            <th>时长区间</th>
+            <th>笔数</th>
+            <th>胜率</th>
+            <th>总盈亏</th>
+            <th>平均盈亏</th>
+            <th>平均持仓(分钟)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
-    <div class="card">
-        <h2>📊 持仓时长分布</h2>
-        <div class="chart-container small" id="hold-duration-chart"></div>
-    </div>
+  </div>
+  <div class="card">
+    <h2>📊 持仓时长分布</h2>
+    <div class="chart-container small" id="hold-duration-chart"></div>
+  </div>
 </div>
 
 <!-- 交易热力图 -->
 <div class="card">
-    <h2>🔥 交易时间热力图（星期 × 小时）</h2>
-    <div class="two-col">
-        <div>
-            <h3 style="font-size:14px;color:#8b949e;margin-bottom:8px">交易频率</h3>
-            <div class="chart-container small" id="heatmap-freq"></div>
-        </div>
-        <div>
-            <h3 style="font-size:14px;color:#8b949e;margin-bottom:8px">胜率分布</h3>
-            <div class="chart-container small" id="heatmap-winrate"></div>
-        </div>
+  <h2>🔥 交易时间热力图（星期 × 小时）</h2>
+  <div class="two-col">
+    <div>
+      <h3 style="font-size: 14px; color: #8b949e; margin-bottom: 8px">
+        交易频率
+      </h3>
+      <div class="chart-container small" id="heatmap-freq"></div>
     </div>
+    <div>
+      <h3 style="font-size: 14px; color: #8b949e; margin-bottom: 8px">
+        胜率分布
+      </h3>
+      <div class="chart-container small" id="heatmap-winrate"></div>
+    </div>
+  </div>
 </div>
 
 <!-- 序列分析 -->
 <div class="card">
-    <h2>📈 订单序列分析</h2>
-    <div class="stats-grid" id="sequence-stats"></div>
-    <div class="chart-container small" id="streak-chart"></div>
+  <h2>📈 订单序列分析</h2>
+  <div class="stats-grid" id="sequence-stats"></div>
+  <div class="chart-container small" id="streak-chart"></div>
 </div>
 
 <!-- 交易记录表 -->
 <div class="card">
-    <h2>📋 交易记录</h2>
-    <div class="filters">
-        <select id="trade-symbol-filter"><option value="">全部币种</option></select>
-        <select id="trade-dir-filter">
-            <option value="">全部方向</option>
-            <option value="long">做多</option>
-            <option value="short">做空</option>
-        </select>
-        <button class="btn" onclick="loadTrades()">刷新</button>
-    </div>
-    <div class="table-scroll" style="max-height:600px">
-        <table id="trades-table">
-            <thead><tr>
-                <th>币种</th><th>方向</th><th>开仓时间</th><th>开仓价</th>
-                <th>平仓时间</th><th>平仓价</th><th>盈亏</th><th>盈亏率</th>
-            </tr></thead>
-            <tbody></tbody>
-        </table>
-    </div>
+  <h2>📋 交易记录</h2>
+  <div class="filters">
+    <select id="trade-symbol-filter">
+      <option value="">全部币种</option>
+    </select>
+    <select id="trade-dir-filter">
+      <option value="">全部方向</option>
+      <option value="long">做多</option>
+      <option value="short">做空</option>
+    </select>
+    <button class="btn" onclick="loadTrades()">刷新</button>
+  </div>
+  <div class="table-scroll" style="max-height: 600px">
+    <table id="trades-table">
+      <thead>
+        <tr>
+          <th>币种</th>
+          <th>方向</th>
+          <th>开仓时间</th>
+          <th>开仓价</th>
+          <th>平仓时间</th>
+          <th>平仓价</th>
+          <th>盈亏</th>
+          <th>盈亏率</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-const WEEKDAYS = ['周一','周二','周三','周四','周五','周六','周日'];
+  const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
-// ===== 拉取订单
-async function fetchOrders() {
-    const btn = document.getElementById('btn-fetch-orders');
-    const status = document.getElementById('order-fetch-status');
-    btn.disabled = true;
-    status.textContent = '拉取中...';
-    status.style.color = '#8b949e';
-
-    const instType = document.getElementById('order-inst-type').value;
+  // ===== 加载订单分析
+  async function loadOrderAnalysis() {
     try {
-        const resp = await fetch('/api/orders/fetch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({inst_type: instType}),
-        });
-        const data = await resp.json();
-        if (data.error) {
-            status.textContent = '❌ ' + data.error;
-            status.style.color = '#f85149';
-        } else {
-            status.textContent = `✅ 成交 ${data.total_fills} 条，配对 ${data.paired_trades} 笔交易`;
-            status.style.color = '#3fb950';
-            loadOrderAnalysis();
-            loadTrades();
-        }
-    } catch(e) {
-        status.textContent = '❌ ' + e.message;
-        status.style.color = '#f85149';
-    } finally {
-        btn.disabled = false;
+      const resp = await fetch("/api/orders/analysis");
+      const data = await resp.json();
+      renderHoldDuration(data.hold_duration);
+      renderHeatmap(data.time_heatmap);
+      renderSequence(data.sequence);
+    } catch (e) {
+      console.error("订单分析加载失败:", e);
     }
-}
+  }
 
-// ===== 加载订单分析
-async function loadOrderAnalysis() {
-    try {
-        const resp = await fetch('/api/orders/analysis');
-        const data = await resp.json();
-        renderHoldDuration(data.hold_duration);
-        renderHeatmap(data.time_heatmap);
-        renderSequence(data.sequence);
-    } catch(e) {
-        console.error('订单分析加载失败:', e);
-    }
-}
-
-function renderHoldDuration(hd) {
+  function renderHoldDuration(hd) {
     if (hd.error) return;
     const bins = hd.bins;
     const labels = {
-        'ultra_short': '⚡ 超短线 (<15min)',
-        'short': '📌 短线 (15-60min)',
-        'medium': '📊 中线 (1-24h)',
-        'long': '📈 长线 (1-7天)',
-        'ultra_long': '🏛 超长线 (>7天)',
+      ultra_short: "⚡ 超短线 (<15min)",
+      short: "📌 短线 (15-60min)",
+      medium: "📊 中线 (1-24h)",
+      long: "📈 长线 (1-7天)",
+      ultra_long: "🏛 超长线 (>7天)",
     };
 
-    const tbody = document.querySelector('#hold-duration-table tbody');
-    const chartData = {names: [], counts: [], pnls: []};
+    const tbody = document.querySelector("#hold-duration-table tbody");
+    const chartData = { names: [], counts: [], pnls: [] };
 
-    tbody.innerHTML = Object.entries(bins).map(([k, v]) => {
+    tbody.innerHTML = Object.entries(bins)
+      .map(([k, v]) => {
         chartData.names.push(labels[k] || k);
         chartData.counts.push(v.count);
         chartData.pnls.push(v.total_pnl);
         return `<tr>
             <td>${labels[k] || k}</td>
             <td>${v.count}</td>
-            <td>${v.win_rate_pct || '0%'}</td>
-            <td class="${v.total_pnl>=0?'positive':'negative'}">${v.total_pnl.toFixed(2)}</td>
-            <td class="${v.avg_pnl>=0?'positive':'negative'}">${v.avg_pnl.toFixed(2)}</td>
+            <td>${v.win_rate_pct || "0%"}</td>
+            <td class="${v.total_pnl >= 0 ? "positive" : "negative"}">${v.total_pnl.toFixed(2)}</td>
+            <td class="${v.avg_pnl >= 0 ? "positive" : "negative"}">${v.avg_pnl.toFixed(2)}</td>
             <td>${v.avg_hold_minutes.toFixed(0)}</td>
         </tr>`;
-    }).join('');
+      })
+      .join("");
 
     // 柱状图
     if (chartData.names.length) {
-        const chart = echarts.init(document.getElementById('hold-duration-chart'));
-        chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-            grid: { left: 50, right: 20, top: 20, bottom: 60 },
-            xAxis: { type: 'category', data: chartData.names, axisLabel: { color: '#8b949e', rotate: 30, fontSize: 11 }, axisLine: { lineStyle: { color: '#30363d' }}},
-            yAxis: [
-                { type: 'value', name: '笔数', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
-            ],
-            series: [
-                { name: '笔数', type: 'bar', data: chartData.counts, itemStyle: { color: '#1f6feb' }},
-            ],
-        });
-        window.addEventListener('resize', () => chart.resize());
+      const chart = echarts.init(
+        document.getElementById("hold-duration-chart"),
+      );
+      chart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+        },
+        grid: { left: 50, right: 20, top: 20, bottom: 60 },
+        xAxis: {
+          type: "category",
+          data: chartData.names,
+          axisLabel: { color: "#8b949e", rotate: 30, fontSize: 11 },
+          axisLine: { lineStyle: { color: "#30363d" } },
+        },
+        yAxis: [
+          {
+            type: "value",
+            name: "笔数",
+            axisLabel: { color: "#8b949e" },
+            splitLine: { lineStyle: { color: "#21262d" } },
+          },
+        ],
+        series: [
+          {
+            name: "笔数",
+            type: "bar",
+            data: chartData.counts,
+            itemStyle: { color: "#1f6feb" },
+          },
+        ],
+      });
+      window.addEventListener("resize", () => chart.resize());
     }
-}
+  }
 
-function renderHeatmap(hm) {
+  function renderHeatmap(hm) {
     if (hm.error) return;
 
     function renderHeatmapChart(elId, data, label, isWinrate) {
-        if (!data.length) return;
-        const chart = echarts.init(document.getElementById(elId));
-        const maxVal = Math.max(...data.map(d => d[2]));
-        chart.setOption({
-            tooltip: {
-                backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' },
-                formatter: p => `${WEEKDAYS[p.value[0]]} ${p.value[1]}:00<br>${label}: ${isWinrate ? (p.value[2]*100).toFixed(1)+'%' : p.value[2]}`
+      if (!data.length) return;
+      const chart = echarts.init(document.getElementById(elId));
+      const maxVal = Math.max(...data.map((d) => d[2]));
+      chart.setOption({
+        tooltip: {
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+          formatter: (p) =>
+            `${WEEKDAYS[p.value[0]]} ${p.value[1]}:00<br>${label}: ${isWinrate ? (p.value[2] * 100).toFixed(1) + "%" : p.value[2]}`,
+        },
+        grid: { left: 50, right: 60, top: 10, bottom: 40 },
+        xAxis: {
+          type: "category",
+          data: Array.from({ length: 24 }, (_, i) => i + ":00"),
+          axisLabel: { color: "#8b949e", fontSize: 10, interval: 2 },
+          axisLine: { lineStyle: { color: "#30363d" } },
+        },
+        yAxis: {
+          type: "category",
+          data: WEEKDAYS,
+          axisLabel: { color: "#8b949e" },
+          axisLine: { lineStyle: { color: "#30363d" } },
+        },
+        visualMap: {
+          min: 0,
+          max: isWinrate ? 1 : maxVal,
+          calculable: true,
+          orient: "horizontal",
+          left: "center",
+          bottom: 0,
+          textStyle: { color: "#8b949e" },
+          inRange: {
+            color: isWinrate
+              ? ["#f85149", "#d29922", "#3fb950"]
+              : ["#0d1117", "#1f6feb", "#58a6ff"],
+          },
+        },
+        series: [
+          {
+            type: "heatmap",
+            data: data,
+            label: { show: false },
+            emphasis: {
+              itemStyle: { shadowBlur: 10, shadowColor: "rgba(0,0,0,0.5)" },
             },
-            grid: { left: 50, right: 60, top: 10, bottom: 40 },
-            xAxis: {
-                type: 'category', data: Array.from({length:24}, (_,i) => i+':00'),
-                axisLabel: { color: '#8b949e', fontSize: 10, interval: 2 }, axisLine: { lineStyle: { color: '#30363d' }}
-            },
-            yAxis: {
-                type: 'category', data: WEEKDAYS,
-                axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}
-            },
-            visualMap: {
-                min: 0, max: isWinrate ? 1 : maxVal, calculable: true, orient: 'horizontal',
-                left: 'center', bottom: 0, textStyle: { color: '#8b949e' },
-                inRange: { color: isWinrate ? ['#f85149', '#d29922', '#3fb950'] : ['#0d1117', '#1f6feb', '#58a6ff'] },
-            },
-            series: [{
-                type: 'heatmap', data: data,
-                label: { show: false },
-                emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }},
-            }],
-        });
-        window.addEventListener('resize', () => chart.resize());
+          },
+        ],
+      });
+      window.addEventListener("resize", () => chart.resize());
     }
 
-    renderHeatmapChart('heatmap-freq', hm.frequency, '交易次数', false);
-    renderHeatmapChart('heatmap-winrate', hm.winrate, '胜率', true);
-}
+    renderHeatmapChart("heatmap-freq", hm.frequency, "交易次数", false);
+    renderHeatmapChart("heatmap-winrate", hm.winrate, "胜率", true);
+  }
 
-function renderSequence(seq) {
+  function renderSequence(seq) {
     if (seq.error) return;
-    document.getElementById('sequence-stats').innerHTML = `
+    document.getElementById("sequence-stats").innerHTML = `
         <div class="stat-card"><div class="label">最大回撤</div><div class="value negative">${seq.max_drawdown}</div></div>
         <div class="stat-card"><div class="label">连续序列总数</div><div class="value neutral">${seq.total_streaks}</div></div>
     `;
 
     // 连续分布图
     const dist = seq.streak_distribution;
-    const entries = Object.entries(dist).sort((a,b) => {
-        const [ta,na] = a[0].split('_'); const [tb,nb] = b[0].split('_');
-        return parseInt(na) - parseInt(nb) || ta.localeCompare(tb);
+    const entries = Object.entries(dist).sort((a, b) => {
+      const [ta, na] = a[0].split("_");
+      const [tb, nb] = b[0].split("_");
+      return parseInt(na) - parseInt(nb) || ta.localeCompare(tb);
     });
     if (entries.length) {
-        const chart = echarts.init(document.getElementById('streak-chart'));
-        chart.setOption({
-            tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
-            grid: { left: 50, right: 20, top: 20, bottom: 40 },
-            xAxis: { type: 'category', data: entries.map(e => e[0]), axisLabel: { color: '#8b949e', rotate: 45, fontSize: 10 }, axisLine: { lineStyle: { color: '#30363d' }}},
-            yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
-            series: [{
-                type: 'bar', data: entries.map(e => ({
-                    value: e[1],
-                    itemStyle: { color: e[0].startsWith('win') ? '#3fb950' : '#f85149' }
-                })),
-            }],
-        });
-        window.addEventListener('resize', () => chart.resize());
+      const chart = echarts.init(document.getElementById("streak-chart"));
+      chart.setOption({
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: "#161b22",
+          borderColor: "#30363d",
+          textStyle: { color: "#c9d1d9" },
+        },
+        grid: { left: 50, right: 20, top: 20, bottom: 40 },
+        xAxis: {
+          type: "category",
+          data: entries.map((e) => e[0]),
+          axisLabel: { color: "#8b949e", rotate: 45, fontSize: 10 },
+          axisLine: { lineStyle: { color: "#30363d" } },
+        },
+        yAxis: {
+          type: "value",
+          axisLabel: { color: "#8b949e" },
+          splitLine: { lineStyle: { color: "#21262d" } },
+        },
+        series: [
+          {
+            type: "bar",
+            data: entries.map((e) => ({
+              value: e[1],
+              itemStyle: {
+                color: e[0].startsWith("win") ? "#3fb950" : "#f85149",
+              },
+            })),
+          },
+        ],
+      });
+      window.addEventListener("resize", () => chart.resize());
     }
-}
+  }
 
-// ===== 交易记录
-async function loadTrades() {
+  // ===== 交易记录
+  async function loadTrades() {
     try {
-        const resp = await fetch('/api/trades');
-        const trades = await resp.json();
-        if (!Array.isArray(trades)) return;
+      const resp = await fetch("/api/trades");
+      const trades = await resp.json();
+      if (!Array.isArray(trades)) return;
 
-        // 币种筛选下拉
-        const symbols = [...new Set(trades.map(t => t.symbol))].sort();
-        const sel = document.getElementById('trade-symbol-filter');
-        const current = sel.value;
-        sel.innerHTML = '<option value="">全部币种</option>' +
-            symbols.map(s => `<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
+      // 币种筛选下拉
+      const symbols = [...new Set(trades.map((t) => t.symbol))].sort();
+      const sel = document.getElementById("trade-symbol-filter");
+      const current = sel.value;
+      sel.innerHTML =
+        '<option value="">全部币种</option>' +
+        symbols
+          .map(
+            (s) =>
+              `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`,
+          )
+          .join("");
 
+      renderTrades(trades);
+
+      // 绑定筛选事件
+      sel.onchange = () => renderTrades(trades);
+      document.getElementById("trade-dir-filter").onchange = () =>
         renderTrades(trades);
-
-        // 绑定筛选事件
-        sel.onchange = () => renderTrades(trades);
-        document.getElementById('trade-dir-filter').onchange = () => renderTrades(trades);
-    } catch(e) {
-        console.error('交易记录加载失败:', e);
+    } catch (e) {
+      console.error("交易记录加载失败:", e);
     }
-}
+  }
 
-function renderTrades(trades) {
-    const sym = document.getElementById('trade-symbol-filter').value;
-    const dir = document.getElementById('trade-dir-filter').value;
+  function renderTrades(trades) {
+    const sym = document.getElementById("trade-symbol-filter").value;
+    const dir = document.getElementById("trade-dir-filter").value;
     let filtered = trades;
-    if (sym) filtered = filtered.filter(t => t.symbol === sym);
-    if (dir) filtered = filtered.filter(t => t.direction === dir);
+    if (sym) filtered = filtered.filter((t) => t.symbol === sym);
+    if (dir) filtered = filtered.filter((t) => t.direction === dir);
 
-    const tbody = document.querySelector('#trades-table tbody');
-    tbody.innerHTML = filtered.slice(0, 500).map(t => {
-        const pnlClass = t.pnl >= 0 ? 'positive' : 'negative';
-        const dirBadge = t.direction === 'long' ?
-            '<span class="badge badge-green">多</span>' :
-            '<span class="badge badge-red">空</span>';
+    const tbody = document.querySelector("#trades-table tbody");
+    tbody.innerHTML = filtered
+      .slice(0, 500)
+      .map((t) => {
+        const pnlClass = t.pnl >= 0 ? "positive" : "negative";
+        const dirBadge =
+          t.direction === "long"
+            ? '<span class="badge badge-green">多</span>'
+            : '<span class="badge badge-red">空</span>';
         return `<tr>
             <td>${t.symbol}</td>
             <td>${dirBadge}</td>
-            <td>${(t.entry_time||'').substring(0,16)}</td>
+            <td>${(t.entry_time || "").substring(0, 16)}</td>
             <td>${t.entry_price}</td>
-            <td>${(t.exit_time||'').substring(0,16)}</td>
-            <td>${t.exit_price||'-'}</td>
-            <td class="${pnlClass}">${t.pnl!=null?t.pnl.toFixed(2):'-'}</td>
-            <td class="${pnlClass}">${t.pnl_rate!=null?(t.pnl_rate*100).toFixed(2)+'%':'-'}</td>
+            <td>${(t.exit_time || "").substring(0, 16)}</td>
+            <td>${t.exit_price || "-"}</td>
+            <td class="${pnlClass}">${t.pnl != null ? t.pnl.toFixed(2) : "-"}</td>
+            <td class="${pnlClass}">${t.pnl_rate != null ? (t.pnl_rate * 100).toFixed(2) + "%" : "-"}</td>
         </tr>`;
-    }).join('');
-}
+      })
+      .join("");
+  }
 
-// 初始加载
-loadOrderAnalysis();
-loadTrades();
+  // 初始加载
+  loadOrderAnalysis();
+  loadTrades();
 </script>
 {% endblock %}

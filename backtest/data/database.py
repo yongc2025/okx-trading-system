@@ -14,7 +14,7 @@ def insert_trade_records(records: List[Dict], conn: sqlite3.Connection = None) -
     if own_conn:
         conn = get_connection()
     cols = [
-        'trade_id', 'symbol', 'direction', 'leverage', 'position_tier',
+        'trade_id', 'account_id', 'symbol', 'direction', 'leverage', 'position_tier',
         'entry_time', 'entry_price', 'entry_qty', 'entry_cost',
         'exit_time', 'exit_price', 'exit_qty', 'exit_value',
         'pnl', 'pnl_rate', 'roi', 'is_win', 'is_loss',
@@ -68,11 +68,17 @@ def insert_snapshots(snapshots: List[Dict], conn: sqlite3.Connection = None) -> 
     return count
 
 
-def load_trade_records_df(conn: sqlite3.Connection = None) -> pd.DataFrame:
+def load_trade_records_df(conn: sqlite3.Connection = None, account_id: str = None) -> pd.DataFrame:
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
-    df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time", conn)
+    sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+    params = []
+    if account_id:
+        sql += " WHERE account_id = ?"
+        params.append(account_id)
+    sql += " ORDER BY entry_time"
+    df = pd.read_sql(sql, conn, params=params if params else None)
     if own_conn:
         conn.close()
     return df
@@ -91,10 +97,12 @@ def load_snapshots_for_trade(trade_id: str, conn: sqlite3.Connection = None) -> 
     return df
 
 
-def get_trade_summary(conn: sqlite3.Connection = None) -> Dict[str, Any]:
+def get_trade_summary(conn: sqlite3.Connection = None, account_id: str = None) -> Dict[str, Any]:
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
+    where = "WHERE account_id = ?" if account_id else ""
+    params = (account_id,) if account_id else ()
     cur = conn.execute(f"""
         SELECT
             COUNT(*) as total,
@@ -106,8 +114,8 @@ def get_trade_summary(conn: sqlite3.Connection = None) -> Dict[str, Any]:
             AVG(CASE WHEN pnl < 0 THEN pnl END) as avg_loss,
             MIN(entry_time) as first_trade,
             MAX(entry_time) as last_trade
-        FROM {TABLE_TRADE_RECORDS}
-    """)
+        FROM {TABLE_TRADE_RECORDS} {where}
+    """, params)
     row = cur.fetchone()
     result = dict(row) if row else {}
     if own_conn:
@@ -115,11 +123,13 @@ def get_trade_summary(conn: sqlite3.Connection = None) -> Dict[str, Any]:
     return result
 
 
-def get_symbol_list(conn: sqlite3.Connection = None) -> List[str]:
+def get_symbol_list(conn: sqlite3.Connection = None, account_id: str = None) -> List[str]:
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
-    cur = conn.execute(f"SELECT DISTINCT symbol FROM {TABLE_TRADE_RECORDS} ORDER BY symbol")
+    where = "WHERE account_id = ?" if account_id else ""
+    params = (account_id,) if account_id else ()
+    cur = conn.execute(f"SELECT DISTINCT symbol FROM {TABLE_TRADE_RECORDS} {where} ORDER BY symbol", params)
     symbols = [row['symbol'] for row in cur.fetchall()]
     if own_conn:
         conn.close()

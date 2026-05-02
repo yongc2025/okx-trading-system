@@ -291,9 +291,10 @@ class KlineDownloader:
 class OrderDownloader:
     """订单下载器"""
 
-    def __init__(self, client: OKXClient, db_path: str | None = None):
+    def __init__(self, client: OKXClient, db_path: str | None = None, account_id: str | None = None):
         self.client = client
         self.db_path = db_path or str(DB_PATH)
+        self.account_id = account_id
 
     # -----------------------------------------------------------------------
     # 公开接口
@@ -574,12 +575,13 @@ class OrderDownloader:
             for trade in trades:
                 cursor.execute(
                     f"INSERT OR IGNORE INTO {TABLE_TRADE_RECORDS} "
-                    "(trade_id, symbol, direction, leverage, entry_time, entry_price, "
+                    "(trade_id, account_id, symbol, direction, leverage, entry_time, entry_price, "
                     "entry_qty, entry_cost, exit_time, exit_price, exit_qty, exit_value, "
                     "pnl, pnl_rate, roi, is_win, is_loss) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         trade["trade_id"],
+                        self.account_id,
                         trade["symbol"],
                         trade["direction"],
                         trade["leverage"],
@@ -599,7 +601,7 @@ class OrderDownloader:
                     ),
                 )
             conn.commit()
-            logger.info(f"[OrderDownloader] 保存 {len(trades)} 笔交易到数据库")
+            logger.info(f"[OrderDownloader] 保存 {len(trades)} 笔交易到数据库 (account_id={self.account_id})")
         finally:
             conn.close()
 
@@ -790,13 +792,14 @@ class OrderImporter:
         return valid_records, errors
 
     @staticmethod
-    def import_csv(csv_path: str | Path, db_path: str | None = None) -> dict:
+    def import_csv(csv_path: str | Path, db_path: str | None = None, account_id: str | None = None) -> dict:
         """
         导入 CSV 到 trade_records 表
 
         Args:
             csv_path: CSV 文件路径
             db_path: 数据库路径
+            account_id: 绑定的账户 ID
 
         Returns:
             {"imported": 50, "skipped": 3, "errors": [...]}
@@ -850,13 +853,14 @@ class OrderImporter:
                 try:
                     cursor.execute(
                         f"INSERT OR IGNORE INTO {TABLE_TRADE_RECORDS} "
-                        "(trade_id, symbol, direction, leverage, entry_time, entry_price, "
+                        "(trade_id, account_id, symbol, direction, leverage, entry_time, entry_price, "
                         "entry_qty, entry_cost, exit_time, exit_price, exit_qty, exit_value, "
                         "pnl, pnl_rate, roi, is_win, is_loss, "
                         "max_floating_loss, max_floating_loss_rate, exceeded_stoploss) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             trade_id,
+                            account_id,
                             rec["symbol"],
                             direction,
                             leverage,

@@ -13,7 +13,7 @@ from backtest.config import TABLE_TRADE_RECORDS
 from backtest.data.schema import get_connection
 
 
-def get_order_analysis() -> dict:
+def get_order_analysis(account_id: str = None) -> dict:
     """
     返回订单多维分析结果
 
@@ -26,7 +26,13 @@ def get_order_analysis() -> dict:
     """
     conn = get_connection()
     try:
-        df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time", conn)
+        sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+        params = []
+        if account_id:
+            sql += " WHERE account_id = ?"
+            params.append(account_id)
+        sql += " ORDER BY entry_time"
+        df = pd.read_sql(sql, conn, params=params if params else None)
     finally:
         conn.close()
 

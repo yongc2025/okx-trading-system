@@ -3,6 +3,7 @@ FastAPI Web 后端
 """
 import json
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -12,8 +13,8 @@ import pandas as pd
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from backtest.config import WEB_HOST, WEB_PORT, PKL_DATA_DIR, DB_PATH
-from backtest.data.schema import init_database
+from backtest.config import WEB_HOST, WEB_PORT, PKL_DATA_DIR, DB_PATH, TABLE_ACCOUNTS
+from backtest.data.schema import init_database, migrate_database
 from backtest.analysis.basic_stats import get_full_analysis
 from backtest.analysis.hold_loss import get_holding_loss_analysis
 from backtest.analysis.stoploss_sim import get_stoploss_analysis
@@ -33,6 +34,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # 初始化数据库
 init_database()
+migrate_database()
 
 
 # ===== 页面路由 =====
@@ -92,21 +94,21 @@ async def optimize_page(request: Request):
 
 # ===== 原有 API 路由 =====
 @app.get("/api/summary")
-async def api_summary():
+async def api_summary(account_id: str = None):
     """交易概要"""
-    return JSONResponse(get_trade_summary())
+    return JSONResponse(get_trade_summary(account_id=account_id))
 
 
 @app.get("/api/symbols")
-async def api_symbols():
+async def api_symbols(account_id: str = None):
     """币种列表"""
-    return JSONResponse(get_symbol_list())
+    return JSONResponse(get_symbol_list(account_id=account_id))
 
 
 @app.get("/api/basic-stats")
-async def api_basic_stats():
+async def api_basic_stats(account_id: str = None):
     """基础统计分析"""
-    result = get_full_analysis()
+    result = get_full_analysis(account_id=account_id)
     eq = result['equity_curve']
     result['equity_curve'] = {
         'time': eq['time'].tolist() if not eq.empty else [],
@@ -123,21 +125,21 @@ async def api_basic_stats():
 
 
 @app.get("/api/hold-loss")
-async def api_hold_loss():
+async def api_hold_loss(account_id: str = None):
     """扛单分析"""
-    return JSONResponse(get_holding_loss_analysis())
+    return JSONResponse(get_holding_loss_analysis(account_id=account_id))
 
 
 @app.get("/api/stoploss")
-async def api_stoploss():
+async def api_stoploss(account_id: str = None):
     """止损回测"""
-    return JSONResponse(get_stoploss_analysis())
+    return JSONResponse(get_stoploss_analysis(account_id=account_id))
 
 
 @app.get("/api/position")
-async def api_position():
+async def api_position(account_id: str = None):
     """仓位分层分析"""
-    return JSONResponse(get_position_tier_analysis())
+    return JSONResponse(get_position_tier_analysis(account_id=account_id))
 
 
 @app.post("/api/scan")
@@ -223,6 +225,189 @@ async def api_okx_test(request: Request):
         return JSONResponse({"ok": False, "error": str(e)})
 
 
+# ===== 账户管理 API =====
+
+@app.get("/api/accounts")
+async def api_accounts_list():
+    """获取所有账户（不返回密钥明文）"""
+    from backtest.data.schema import get_connection
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            f"SELECT account_id, account_name, api_key, is_demo, created_at, updated_at "
+            f"FROM {TABLE_ACCOUNTS} ORDER BY created_at"
+        ).fetchall()
+        accounts = []
+        for row in rows:
+            accounts.append({
+                "account_id": row["account_id"],
+                "account_name": row["account_name"],
+                "api_key_masked": row["api_key"][:8] + "..." + row["api_key"][-4:] if len(row["api_key"]) > 12 else row["api_key"],
+                "is_demo": row["is_demo"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            })
+        return JSONResponse(accounts)
+    finally:
+        conn.close()
+
+
+@app.post("/api/accounts")
+async def api_accounts_create(request: Request):
+    """创建新账户"""
+    from backtest.data.schema import get_connection
+    from backtest.data.encryption import encrypt
+
+    body = await request.json()
+    name = body.get("account_name", "").strip()
+    api_key = body.get("api_key", "").strip()
+    secret = body.get("secret", "").strip()
+    passphrase = body.get("passphrase", "").strip()
+    is_demo = 1 if body.get("is_demo", True) else 0
+
+    if not name:
+        return JSONResponse({"error": "账户名称不能为空"}, status_code=400)
+    if not api_key or not secret or not passphrase:
+        return JSONResponse({"error": "API Key / Secret / Passphrase 不能为空"}, status_code=400)
+
+    account_id = "acc_" + uuid.uuid4().hex[:8]
+
+    conn = get_connection()
+    try:
+        # 检查名称是否重复
+        existing = conn.execute(
+            f"SELECT account_id FROM {TABLE_ACCOUNTS} WHERE account_name = ?", (name,)
+        ).fetchone()
+        if existing:
+            return JSONResponse({"error": f"账户名称 '{name}' 已存在"}, status_code=400)
+
+        conn.execute(
+            f"INSERT INTO {TABLE_ACCOUNTS} "
+            f"(account_id, account_name, api_key, secret, passphrase, is_demo) "
+            f"VALUES (?, ?, ?, ?, ?, ?)",
+            (account_id, name, encrypt(api_key), encrypt(secret), encrypt(passphrase), is_demo),
+        )
+        conn.commit()
+        return JSONResponse({"ok": True, "account_id": account_id, "account_name": name})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+    finally:
+        conn.close()
+
+
+@app.put("/api/accounts/{account_id}")
+async def api_accounts_update(account_id: str, request: Request):
+    """更新账户"""
+    from backtest.data.schema import get_connection
+    from backtest.data.encryption import encrypt
+
+    body = await request.json()
+    name = body.get("account_name", "").strip()
+    api_key = body.get("api_key", "").strip()
+    secret = body.get("secret", "").strip()
+    passphrase = body.get("passphrase", "").strip()
+    is_demo = body.get("is_demo")
+
+    conn = get_connection()
+    try:
+        existing = conn.execute(
+            f"SELECT * FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,)
+        ).fetchone()
+        if not existing:
+            return JSONResponse({"error": "账户不存在"}, status_code=404)
+
+        updates = []
+        params = []
+        if name:
+            # 检查名称是否与其他账户重复
+            dup = conn.execute(
+                f"SELECT account_id FROM {TABLE_ACCOUNTS} WHERE account_name = ? AND account_id != ?",
+                (name, account_id),
+            ).fetchone()
+            if dup:
+                return JSONResponse({"error": f"账户名称 '{name}' 已被使用"}, status_code=400)
+            updates.append("account_name = ?")
+            params.append(name)
+        if api_key:
+            updates.append("api_key = ?")
+            params.append(encrypt(api_key))
+        if secret:
+            updates.append("secret = ?")
+            params.append(encrypt(secret))
+        if passphrase:
+            updates.append("passphrase = ?")
+            params.append(encrypt(passphrase))
+        if is_demo is not None:
+            updates.append("is_demo = ?")
+            params.append(1 if is_demo else 0)
+
+        if not updates:
+            return JSONResponse({"error": "无更新内容"}, status_code=400)
+
+        updates.append("updated_at = datetime('now')")
+        params.append(account_id)
+
+        conn.execute(
+            f"UPDATE {TABLE_ACCOUNTS} SET {', '.join(updates)} WHERE account_id = ?",
+            params,
+        )
+        conn.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        conn.close()
+
+
+@app.delete("/api/accounts/{account_id}")
+async def api_accounts_delete(account_id: str):
+    """删除账户"""
+    from backtest.data.schema import get_connection
+    conn = get_connection()
+    try:
+        existing = conn.execute(
+            f"SELECT account_id FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,)
+        ).fetchone()
+        if not existing:
+            return JSONResponse({"error": "账户不存在"}, status_code=404)
+
+        conn.execute(f"DELETE FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,))
+        conn.commit()
+        return JSONResponse({"ok": True})
+    finally:
+        conn.close()
+
+
+@app.post("/api/accounts/{account_id}/test")
+async def api_accounts_test(account_id: str):
+    """测试账户连接"""
+    from backtest.data.schema import get_connection
+    from backtest.data.encryption import decrypt
+
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            f"SELECT * FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,)
+        ).fetchone()
+        if not row:
+            return JSONResponse({"error": "账户不存在"}, status_code=404)
+
+        api_key = decrypt(row["api_key"])
+        secret = decrypt(row["secret"])
+        passphrase = decrypt(row["passphrase"])
+
+        from backtest.data.okx_client import OKXClient
+        client = OKXClient(
+            api_key=api_key, secret=secret,
+            passphrase=passphrase, is_demo=bool(row["is_demo"]),
+        )
+        ok = await client.connect()
+        await client.close()
+        return JSONResponse({"ok": ok})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    finally:
+        conn.close()
+
+
 # ===== 新增 API：K 线数据管理 =====
 
 # 全局下载器实例（供进度查询），使用锁保护并发访问
@@ -247,6 +432,7 @@ async def api_kline_download(request: Request):
     days = body.get("days", 90)
     start_date = body.get("start_date")  # "YYYY-MM-DD" or None
     end_date = body.get("end_date")      # "YYYY-MM-DD" or None
+    account_id = body.get("account_id")
 
     if not symbols:
         return JSONResponse({"error": "请指定币种"}, status_code=400)
@@ -259,11 +445,28 @@ async def api_kline_download(request: Request):
         try:
             from backtest.data.okx_client import OKXClient
             from backtest.data.downloader import KlineDownloader
+            from backtest.data.schema import get_connection
+            from backtest.data.encryption import decrypt
 
-            api_key = body.get("api_key", "")
-            secret = body.get("secret", "")
-            passphrase = body.get("passphrase", "")
-            is_demo = body.get("is_demo", True)
+            # 如果指定了账户，从数据库读取密钥
+            if account_id:
+                conn = get_connection()
+                row = conn.execute(
+                    f"SELECT * FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,)
+                ).fetchone()
+                conn.close()
+                if not row:
+                    return JSONResponse({"error": "账户不存在"}, status_code=404)
+
+                api_key = decrypt(row["api_key"])
+                secret = decrypt(row["secret"])
+                passphrase = decrypt(row["passphrase"])
+                is_demo = bool(row["is_demo"])
+            else:
+                api_key = body.get("api_key", "")
+                secret = body.get("secret", "")
+                passphrase = body.get("passphrase", "")
+                is_demo = body.get("is_demo", True)
 
             client = OKXClient(
                 api_key=api_key, secret=secret,
@@ -307,10 +510,13 @@ async def api_csv_template():
 
 
 @app.post("/api/csv/import")
-async def api_csv_import(file: UploadFile = File(...)):
-    """导入 CSV 订单"""
+async def api_csv_import(request: Request, file: UploadFile = File(...)):
+    """导入 CSV 订单（支持绑定账户）"""
     if not file.filename.endswith('.csv'):
         return JSONResponse({"error": "请上传 .csv 文件"}, status_code=400)
+
+    # 从 query 参数获取 account_id
+    account_id = request.query_params.get("account_id")
 
     # 保存临时文件
     tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
@@ -320,7 +526,7 @@ async def api_csv_import(file: UploadFile = File(...)):
 
     try:
         from backtest.data.downloader import OrderImporter
-        result = OrderImporter.import_csv(tmp.name)
+        result = OrderImporter.import_csv(tmp.name, account_id=account_id)
         return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": str(e)})
@@ -352,15 +558,22 @@ async def api_backfill_float_loss():
 
 
 @app.post("/api/clear-trades")
-async def api_clear_trades():
-    """清空所有交易记录及相关数据"""
+async def api_clear_trades(request: Request):
+    """清空交易记录及相关数据（支持按账户清空）"""
     try:
         from backtest.data.schema import get_connection
         from backtest.config import TABLE_TRADE_RECORDS
+
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        account_id = body.get("account_id")
+
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(f"DELETE FROM {TABLE_TRADE_RECORDS}")
-        cursor.execute("DELETE FROM position_snapshots")
+        if account_id:
+            cursor.execute(f"DELETE FROM {TABLE_TRADE_RECORDS} WHERE account_id = ?", (account_id,))
+        else:
+            cursor.execute(f"DELETE FROM {TABLE_TRADE_RECORDS}")
+            cursor.execute("DELETE FROM position_snapshots")
         trades_deleted = cursor.rowcount
         conn.commit()
         conn.close()
@@ -377,25 +590,43 @@ _order_downloader = None
 
 @app.post("/api/orders/fetch")
 async def api_orders_fetch(request: Request):
-    """从 OKX 拉取成交记录并配对"""
+    """从 OKX 拉取成交记录并配对（支持按账户拉取）"""
     global _order_downloader
     body = await request.json()
     inst_type = body.get("inst_type", "SWAP")
+    account_id = body.get("account_id")
 
     try:
         from backtest.data.okx_client import OKXClient
         from backtest.data.downloader import OrderDownloader
+        from backtest.data.schema import get_connection
+        from backtest.data.encryption import decrypt
 
-        api_key = body.get("api_key", "")
-        secret = body.get("secret", "")
-        passphrase = body.get("passphrase", "")
-        is_demo = body.get("is_demo", True)
+        # 如果指定了账户，从数据库读取密钥
+        if account_id:
+            conn = get_connection()
+            row = conn.execute(
+                f"SELECT * FROM {TABLE_ACCOUNTS} WHERE account_id = ?", (account_id,)
+            ).fetchone()
+            conn.close()
+            if not row:
+                return JSONResponse({"error": "账户不存在"}, status_code=404)
+
+            api_key = decrypt(row["api_key"])
+            secret = decrypt(row["secret"])
+            passphrase = decrypt(row["passphrase"])
+            is_demo = bool(row["is_demo"])
+        else:
+            api_key = body.get("api_key", "")
+            secret = body.get("secret", "")
+            passphrase = body.get("passphrase", "")
+            is_demo = body.get("is_demo", True)
 
         client = OKXClient(
             api_key=api_key, secret=secret,
             passphrase=passphrase, is_demo=is_demo,
         )
-        _order_downloader = OrderDownloader(client)
+        _order_downloader = OrderDownloader(client, account_id=account_id)
         result = await _order_downloader.download(inst_type)
         await client.close()
         return JSONResponse(result)
@@ -404,21 +635,27 @@ async def api_orders_fetch(request: Request):
 
 
 @app.get("/api/orders/analysis")
-async def api_orders_analysis():
+async def api_orders_analysis(account_id: str = None):
     """订单多维分析"""
     try:
         from backtest.analysis.order_analysis import get_order_analysis
-        return JSONResponse(get_order_analysis())
+        return JSONResponse(get_order_analysis(account_id=account_id))
     except Exception as e:
         return JSONResponse({"error": str(e)})
 
 
 @app.get("/api/trades")
-async def api_trades():
+async def api_trades(account_id: str = None):
     """获取交易记录列表"""
     from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS
     conn = get_connection()
-    df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time DESC", conn)
+    sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+    params = []
+    if account_id:
+        sql += " WHERE account_id = ?"
+        params.append(account_id)
+    sql += " ORDER BY entry_time DESC"
+    df = pd.read_sql(sql, conn, params=params if params else None)
     conn.close()
     return JSONResponse(df.to_dict('records'))
 
@@ -433,6 +670,7 @@ async def api_simulate(request: Request):
     takeprofit_pct = body.get("takeprofit_pct", 0.20)
     kline_bar = body.get("kline_bar", "5m")
     trigger_priority = body.get("trigger_priority", "stoploss_first")
+    account_id = body.get("account_id")
 
     try:
         from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS
@@ -440,7 +678,13 @@ async def api_simulate(request: Request):
         from backtest.analysis.basic_stats import calc_basic_stats, calc_equity_curve
 
         conn = get_connection()
-        trades_df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time", conn)
+        sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+        params = []
+        if account_id:
+            sql += " WHERE account_id = ?"
+            params.append(account_id)
+        sql += " ORDER BY entry_time"
+        trades_df = pd.read_sql(sql, conn, params=params if params else None)
         conn.close()
 
         if trades_df.empty:
@@ -524,13 +768,20 @@ async def api_optimize(request: Request):
     stoploss_ratios = body.get("stoploss_ratios", [0.05, 0.10, 0.15, 0.20])
     takeprofit_ratios = body.get("takeprofit_ratios", [0.05, 0.10, 0.20, 0.50])
     kline_bar = body.get("kline_bar", "5m")
+    account_id = body.get("account_id")
 
     try:
         from backtest.data.schema import get_connection, TABLE_TRADE_RECORDS
         from backtest.analysis.simulator import BatchSimulator
 
         conn = get_connection()
-        trades_df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time", conn)
+        sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+        params = []
+        if account_id:
+            sql += " WHERE account_id = ?"
+            params.append(account_id)
+        sql += " ORDER BY entry_time"
+        trades_df = pd.read_sql(sql, conn, params=params if params else None)
         conn.close()
 
         if trades_df.empty:

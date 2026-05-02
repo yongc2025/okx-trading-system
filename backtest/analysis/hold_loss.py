@@ -135,13 +135,19 @@ def calc_holding_loss_analysis(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def get_holding_loss_analysis(conn: sqlite3.Connection = None) -> Dict[str, Any]:
+def get_holding_loss_analysis(conn: sqlite3.Connection = None, account_id: str = None) -> Dict[str, Any]:
     """从数据库加载数据并执行扛单分析"""
     own_conn = conn is None
     if own_conn:
         conn = get_connection()
 
-    df = pd.read_sql(f"SELECT * FROM {TABLE_TRADE_RECORDS} ORDER BY entry_time", conn)
+    sql = f"SELECT * FROM {TABLE_TRADE_RECORDS}"
+    params = []
+    if account_id:
+        sql += " WHERE account_id = ?"
+        params.append(account_id)
+    sql += " ORDER BY entry_time"
+    df = pd.read_sql(sql, conn, params=params if params else None)
 
     if own_conn:
         conn.close()

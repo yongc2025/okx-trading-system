@@ -7,6 +7,7 @@ from backtest.config import (
     TABLE_TRADE_RECORDS, TABLE_POSITION_SNAPSHOTS,
     TABLE_SCAN_RESULTS, TABLE_APP_SETTINGS,
     TABLE_KLINE_DATA, TABLE_DOWNLOAD_STATUS,
+    TABLE_ACCOUNTS,
 )
 
 
@@ -27,11 +28,26 @@ def init_database(db_path: str = None) -> sqlite3.Connection:
     conn = get_connection(db_path)
     cursor = conn.cursor()
 
+    # ---- 0. 账户表
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {TABLE_ACCOUNTS} (
+        account_id      TEXT PRIMARY KEY,
+        account_name    TEXT NOT NULL,
+        api_key         TEXT NOT NULL,
+        secret          TEXT NOT NULL,
+        passphrase      TEXT NOT NULL,
+        is_demo         INTEGER DEFAULT 1,
+        created_at      TEXT DEFAULT (datetime('now')),
+        updated_at      TEXT DEFAULT (datetime('now'))
+    )
+    """)
+
     # ---- 1. 交易记录表
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {TABLE_TRADE_RECORDS} (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         trade_id        TEXT UNIQUE,
+        account_id      TEXT,
         symbol          TEXT NOT NULL,
         direction       TEXT NOT NULL,
         leverage        INTEGER DEFAULT 1,
@@ -59,6 +75,7 @@ def init_database(db_path: str = None) -> sqlite3.Connection:
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_trade_symbol ON {TABLE_TRADE_RECORDS}(symbol)")
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_trade_time ON {TABLE_TRADE_RECORDS}(entry_time)")
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_trade_direction ON {TABLE_TRADE_RECORDS}(direction)")
+    cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_trade_account ON {TABLE_TRADE_RECORDS}(account_id)")
 
     # ---- 2. 持仓快照表
     cursor.execute(f"""
@@ -153,6 +170,36 @@ def init_database(db_path: str = None) -> sqlite3.Connection:
 
     conn.commit()
     return conn
+
+
+def migrate_database(db_path: str = None):
+    """迁移已有数据库：添加新表/列（幂等，可重复执行）"""
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+
+    # 1. 确保 accounts 表存在
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {TABLE_ACCOUNTS} (
+        account_id      TEXT PRIMARY KEY,
+        account_name    TEXT NOT NULL,
+        api_key         TEXT NOT NULL,
+        secret          TEXT NOT NULL,
+        passphrase      TEXT NOT NULL,
+        is_demo         INTEGER DEFAULT 1,
+        created_at      TEXT DEFAULT (datetime('now')),
+        updated_at      TEXT DEFAULT (datetime('now'))
+    )
+    """)
+
+    # 2. 确保 trade_records 有 account_id 列
+    cursor.execute(f"PRAGMA table_info({TABLE_TRADE_RECORDS})")
+    columns = {row[1] for row in cursor.fetchall()}
+    if 'account_id' not in columns:
+        cursor.execute(f"ALTER TABLE {TABLE_TRADE_RECORDS} ADD COLUMN account_id TEXT")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_trade_account ON {TABLE_TRADE_RECORDS}(account_id)")
+
+    conn.commit()
+    conn.close()
 
 
 def reset_database(db_path: str = None):

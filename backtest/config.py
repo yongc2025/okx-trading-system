@@ -21,6 +21,13 @@ TABLE_SCAN_RESULTS = "scan_results"
 TABLE_APP_SETTINGS = "app_settings"
 TABLE_KLINE_DATA = "kline_data"
 TABLE_DOWNLOAD_STATUS = "download_status"
+TABLE_ACCOUNTS = "accounts"
+
+# ===== 加密配置
+ENCRYPTION_KEY_FILE = DATA_DIR / ".key"
+ENCRYPTION_SALT_LENGTH = 16
+ENCRYPTION_ITERATIONS = 100_000
+ENCRYPTION_KEY_LENGTH = 32  # AES-256
 
 # ===== 下载参数
 DOWNLOAD_BATCH_SIZE = 100  # 每次拉取 K 线条数
