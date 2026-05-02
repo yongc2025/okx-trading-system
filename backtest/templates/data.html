@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% set active = "data" %}
+{% block title %}数据管理 - OKX 回测系统{% endblock %}
+
+{% block content %}
+<!-- OKX 连接配置 -->
+<div class="card">
+    <h2>🔗 OKX API 配置</h2>
+    <div class="filters" style="margin-bottom:0">
+        <input type="text" id="cfg-api-key" placeholder="API Key" style="width:240px">
+        <input type="password" id="cfg-secret" placeholder="Secret Key" style="width:240px">
+        <input type="text" id="cfg-passphrase" placeholder="Passphrase" style="width:160px">
+        <label style="color:#8b949e;font-size:13px">
+            <input type="checkbox" id="cfg-demo" checked> 模拟盘
+        </label>
+        <button class="btn btn-primary" onclick="testConnection()">测试连接</button>
+        <span id="conn-status" style="font-size:13px"></span>
+    </div>
+</div>
+
+<!-- K 线下载 -->
+<div class="card">
+    <h2>📥 K 线下载</h2>
+    <div class="filters">
+        <label style="color:#8b949e;font-size:13px">币种（逗号分隔）:</label>
+        <input type="text" id="dl-symbols" value="BTC-USDT-SWAP,ETH-USDT-SWAP" style="width:360px">
+        <label style="color:#8b949e;font-size:13px">周期:</label>
+        <select id="dl-bars" multiple size="1" style="min-width:120px;height:32px">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1H">1H</option>
+            <option value="4H">4H</option>
+            <option value="1D">1D</option>
+        </select>
+        <label style="color:#8b949e;font-size:13px">天数:</label>
+        <input type="number" id="dl-days" value="90" min="1" max="365" style="width:80px">
+        <button class="btn btn-primary" id="btn-download" onclick="startDownload()">开始下载</button>
+    </div>
+    <div id="download-progress" style="margin-top:16px;display:none">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <span id="dl-status-text" style="color:#8b949e">准备中...</span>
+            <span id="dl-count" style="color:#58a6ff">0/0</span>
+        </div>
+        <div style="background:#21262d;border-radius:4px;height:8px;overflow:hidden">
+            <div id="dl-bar" style="background:#1f6feb;height:100%;width:0%;transition:width 0.3s"></div>
+        </div>
+        <div id="dl-errors" style="margin-top:8px;color:#f85149;font-size:13px"></div>
+    </div>
+</div>
+
+<div class="two-col">
+    <!-- K 线数据概览 -->
+    <div class="card">
+        <h2>📊 K 线数据概览</h2>
+        <div id="kline-info-loading" class="loading">加载中...</div>
+        <div class="table-scroll" id="kline-info-table" style="display:none">
+            <table>
+                <thead>
+                    <tr><th>币种</th><th>周期</th><th>起始</th><th>截止</th><th>条数</th></tr>
+                </thead>
+                <tbody id="kline-info-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- CSV 导入 -->
+    <div class="card">
+        <h2>📄 CSV 订单导入</h2>
+        <div style="margin-bottom:12px">
+            <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
+        </div>
+        <div style="margin-bottom:12px">
+            <input type="file" id="csv-file" accept=".csv" style="color:#8b949e;font-size:13px">
+            <button class="btn btn-primary" onclick="importCSV()" style="margin-left:8px">导入</button>
+        </div>
+        <div id="csv-result" style="font-size:13px;margin-top:8px"></div>
+
+        <div style="margin-top:20px;border-top:1px solid #30363d;padding-top:16px">
+            <h2 style="font-size:14px;margin-bottom:12px">📋 CSV 格式说明</h2>
+            <div style="font-size:13px;color:#8b949e;line-height:1.8">
+                <p><b>必填列：</b>symbol, direction, entry_time, entry_price, exit_time, exit_price</p>
+                <p><b>可选列：</b>leverage (默认1), entry_cost (默认1000)</p>
+                <p><b>时间格式：</b>YYYY-MM-DD HH:MM</p>
+                <p><b>direction：</b>long / short</p>
+                <p><b>自动计算：</b>pnl, roi, is_win 等指标</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 下载状态详情 -->
+<div class="card">
+    <h2>📋 下载状态详情</h2>
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>币种</th><th>周期</th><th>状态</th><th>已下载</th><th>总数</th>
+                </tr>
+            </thead>
+            <tbody id="progress-body"></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ===== K 线数据概览
+async function loadKlineInfo() {
+    try {
+        const resp = await fetch('/api/kline-info');
+        const data = await resp.json();
+        document.getElementById('kline-info-loading').style.display = 'none';
+        document.getElementById('kline-info-table').style.display = 'block';
+        const tbody = document.getElementById('kline-info-body');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(r => `<tr>
+            <td>${r.symbol}</td>
+            <td><span class="badge badge-blue">${r.bar}</span></td>
+            <td>${(r.first_time||'').substring(0,16)}</td>
+            <td>${(r.last_time||'').substring(0,16)}</td>
+            <td>${r.count}</td>
+        </tr>`).join('');
+    } catch(e) {
+        document.getElementById('kline-info-loading').textContent = '加载失败: ' + e.message;
+    }
+}
+loadKlineInfo();
+
+// ===== OKX 连接测试
+async function testConnection() {
+    const el = document.getElementById('conn-status');
+    el.textContent = '测试中...';
+    el.style.color = '#8b949e';
+    try {
+        const resp = await fetch('/api/okx/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                api_key: document.getElementById('cfg-api-key').value,
+                secret: document.getElementById('cfg-secret').value,
+                passphrase: document.getElementById('cfg-passphrase').value,
+                is_demo: document.getElementById('cfg-demo').checked,
+            }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            el.textContent = '✅ 连接成功';
+            el.style.color = '#3fb950';
+        } else {
+            el.textContent = '❌ ' + (data.error || '连接失败');
+            el.style.color = '#f85149';
+        }
+    } catch(e) {
+        el.textContent = '❌ 请求失败';
+        el.style.color = '#f85149';
+    }
+}
+
+// ===== K 线下载
+let pollTimer = null;
+
+async function startDownload() {
+    const btn = document.getElementById('btn-download');
+    btn.disabled = true;
+    btn.textContent = '下载中...';
+
+    const symbols = document.getElementById('dl-symbols').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+    const barsSelect = document.getElementById('dl-bars');
+    const bars = Array.from(barsSelect.selectedOptions).map(o => o.value);
+    const days = parseInt(document.getElementById('dl-days').value) || 90;
+
+    if (!symbols.length || !bars.length) {
+        alert('请填写币种和选择周期');
+        btn.disabled = false;
+        btn.textContent = '开始下载';
+        return;
+    }
+
+    document.getElementById('download-progress').style.display = 'block';
+    document.getElementById('dl-status-text').textContent = '下载中...';
+    document.getElementById('dl-errors').textContent = '';
+
+    // 启动下载
+    fetch('/api/kline/download', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({symbols, bars, days}),
+    }).then(r => r.json()).then(data => {
+        if (data.error) {
+            document.getElementById('dl-errors').textContent = '错误: ' + data.error;
+        }
+        loadKlineInfo();
+    }).catch(e => {
+        document.getElementById('dl-errors').textContent = '请求失败: ' + e.message;
+    }).finally(() => {
+        btn.disabled = false;
+        btn.textContent = '开始下载';
+        if (pollTimer) clearInterval(pollTimer);
+    });
+
+    // 轮询进度
+    pollTimer = setInterval(async () => {
+        try {
+            const resp = await fetch('/api/kline/progress');
+            const progress = await resp.json();
+            updateProgressTable(progress);
+        } catch(e) {}
+    }, 1500);
+}
+
+function updateProgressTable(progress) {
+    const tbody = document.getElementById('progress-body');
+    let totalTasks = 0, doneTasks = 0;
+    const rows = [];
+    for (const [symbol, bars] of Object.entries(progress)) {
+        for (const [bar, info] of Object.entries(bars)) {
+            totalTasks++;
+            if (info.status === 'done') doneTasks++;
+            const statusColor = info.status === 'done' ? '#3fb950' :
+                               info.status === 'error' ? '#f85149' : '#58a6ff';
+            const statusText = info.status === 'done' ? '✅ 完成' :
+                              info.status === 'error' ? '❌ 错误' :
+                              info.status === 'downloading' ? '⏳ 下载中' : '⏸ 等待';
+            rows.push(`<tr>
+                <td>${symbol}</td>
+                <td><span class="badge badge-blue">${bar}</span></td>
+                <td style="color:${statusColor}">${statusText}</td>
+                <td>${info.downloaded}</td>
+                <td>${info.total}</td>
+            </tr>`);
+        }
+    }
+    tbody.innerHTML = rows.join('');
+    document.getElementById('dl-count').textContent = `${doneTasks}/${totalTasks}`;
+    document.getElementById('dl-bar').style.width =
+        totalTasks > 0 ? (doneTasks / totalTasks * 100) + '%' : '0%';
+
+    if (doneTasks === totalTasks && totalTasks > 0) {
+        document.getElementById('dl-status-text').textContent = '✅ 全部完成';
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+}
+
+// ===== CSV 模板下载
+function downloadTemplate() {
+    window.open('/api/csv/template', '_blank');
+}
+
+// ===== CSV 导入
+async function importCSV() {
+    const fileInput = document.getElementById('csv-file');
+    if (!fileInput.files.length) {
+        alert('请选择 CSV 文件');
+        return;
+    }
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const el = document.getElementById('csv-result');
+    el.innerHTML = '<span style="color:#8b949e">导入中...</span>';
+
+    try {
+        const resp = await fetch('/api/csv/import', {method: 'POST', body: formData});
+        const data = await resp.json();
+        if (data.error) {
+            el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
+        } else {
+            let html = `<span style="color:#3fb950">✅ 导入 ${data.imported} 条，跳过 ${data.skipped} 条</span>`;
+            if (data.errors && data.errors.length) {
+                html += `<br><span style="color:#f85149">${data.errors.join('<br>')}</span>`;
+            }
+            el.innerHTML = html;
+        }
+    } catch(e) {
+        el.innerHTML = `<span style="color:#f85149">❌ ${e.message}</span>`;
+    }
+}
+</script>
+{% endblock %}

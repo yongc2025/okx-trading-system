@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% set active = "simulate" %}
+{% block title %}模拟回测 - OKX 回测系统{% endblock %}
+
+{% block content %}
+<!-- 参数设置 -->
+<div class="card">
+    <h2>🔬 模拟参数</h2>
+    <div class="filters" style="margin-bottom:0">
+        <label style="color:#8b949e;font-size:13px">止损比例 (%):</label>
+        <input type="number" id="sim-sl" value="10" min="1" max="90" step="1" style="width:80px">
+        <label style="color:#8b949e;font-size:13px">止盈比例 (%):</label>
+        <input type="number" id="sim-tp" value="20" min="1" max="500" step="1" style="width:80px">
+        <label style="color:#8b949e;font-size:13px">K线周期:</label>
+        <select id="sim-bar">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1H">1H</option>
+        </select>
+        <label style="color:#8b949e;font-size:13px">触发优先级:</label>
+        <select id="sim-priority">
+            <option value="stoploss_first" selected>止损优先</option>
+            <option value="takeprofit_first">止盈优先</option>
+            <option value="open_compare">开盘价比较</option>
+        </select>
+        <button class="btn btn-primary" onclick="runSimulation()">运行模拟</button>
+        <span id="sim-status" style="font-size:13px;margin-left:8px"></span>
+    </div>
+</div>
+
+<!-- 模拟结果概要 -->
+<div class="stats-grid" id="sim-summary">
+    <div class="stat-card"><div class="label">设置参数后点击运行</div></div>
+</div>
+
+<!-- 对比：实际 vs 模拟 -->
+<div class="two-col">
+    <div class="card">
+        <h2>📊 实际 vs 模拟 对比</h2>
+        <div class="table-scroll">
+            <table id="sim-compare-table">
+                <thead><tr><th>指标</th><th>实际</th><th>模拟</th><th>差异</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card">
+        <h2>🎯 触发类型分布</h2>
+        <div class="chart-container small" id="trigger-chart"></div>
+    </div>
+</div>
+
+<!-- 净值曲线对比 -->
+<div class="card">
+    <h2>📈 净值曲线对比</h2>
+    <div class="chart-container" id="sim-equity-chart"></div>
+</div>
+
+<!-- 逐笔交易详情 -->
+<div class="card">
+    <h2>📋 模拟交易详情</h2>
+    <div class="filters">
+        <select id="sim-filter-trigger">
+            <option value="">全部触发类型</option>
+            <option value="stoploss">止损触发</option>
+            <option value="takeprofit">止盈触发</option>
+            <option value="timeout">超时平仓</option>
+        </select>
+        <select id="sim-filter-diff">
+            <option value="">全部</option>
+            <option value="better">模拟更优</option>
+            <option value="worse">模拟更差</option>
+        </select>
+    </div>
+    <div class="table-scroll" style="max-height:500px">
+        <table id="sim-trades-table">
+            <thead><tr>
+                <th>币种</th><th>方向</th><th>开仓价</th><th>触发类型</th>
+                <th>模拟平仓价</th><th>模拟盈亏</th><th>实际盈亏</th><th>差异</th>
+                <th>持仓bar数</th>
+            </tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let simResults = null;
+
+async function runSimulation() {
+    const btn = event.target;
+    const status = document.getElementById('sim-status');
+    btn.disabled = true;
+    status.textContent = '模拟中...';
+    status.style.color = '#8b949e';
+
+    const params = {
+        stoploss_pct: parseFloat(document.getElementById('sim-sl').value) / 100,
+        takeprofit_pct: parseFloat(document.getElementById('sim-tp').value) / 100,
+        kline_bar: document.getElementById('sim-bar').value,
+        trigger_priority: document.getElementById('sim-priority').value,
+    };
+
+    try {
+        const resp = await fetch('/api/simulate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(params),
+        });
+        simResults = await resp.json();
+
+        if (simResults.error) {
+            status.textContent = '❌ ' + simResults.error;
+            status.style.color = '#f85149';
+            return;
+        }
+
+        status.textContent = '✅ 完成';
+        status.style.color = '#3fb950';
+
+        renderSimSummary(simResults);
+        renderSimComparison(simResults);
+        renderTriggerChart(simResults);
+        renderSimEquity(simResults);
+        renderSimTrades(simResults);
+    } catch(e) {
+        status.textContent = '❌ ' + e.message;
+        status.style.color = '#f85149';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderSimSummary(r) {
+    const s = r.summary || {};
+    document.getElementById('sim-summary').innerHTML = `
+        <div class="stat-card"><div class="label">模拟笔数</div><div class="value neutral">${s.total_trades||0}</div></div>
+        <div class="stat-card"><div class="label">胜率</div><div class="value neutral">${((s.win_rate||0)*100).toFixed(1)}%</div></div>
+        <div class="stat-card"><div class="label">总盈亏</div><div class="value ${(s.total_pnl||0)>=0?'positive':'negative'}">${(s.total_pnl||0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">盈亏比</div><div class="value neutral">${s.profit_loss_ratio||0}</div></div>
+        <div class="stat-card"><div class="label">最大回撤</div><div class="value negative">${(s.max_drawdown||0).toFixed(2)}</div></div>
+        <div class="stat-card"><div class="label">平均持仓bar</div><div class="value neutral">${(s.avg_hold_bars||0).toFixed(1)}</div></div>
+    `;
+}
+
+function renderSimComparison(r) {
+    const actual = r.actual_stats || {};
+    const sim = r.summary || {};
+    const rows = [
+        ['总笔数', actual.total_trades||0, sim.total_trades||0],
+        ['胜率', ((actual.win_rate||0)*100).toFixed(2)+'%', ((sim.win_rate||0)*100).toFixed(2)+'%'],
+        ['总盈亏', (actual.total_pnl||0).toFixed(2), (sim.total_pnl||0).toFixed(2)],
+        ['平均盈亏', (actual.avg_pnl||0).toFixed(2), (sim.avg_pnl||0).toFixed(2)],
+        ['盈亏比', actual.profit_loss_ratio||'-', sim.profit_loss_ratio||'-'],
+    ];
+    const tbody = document.querySelector('#sim-compare-table tbody');
+    tbody.innerHTML = rows.map(([label, a, b]) => {
+        let diff = '';
+        if (typeof a === 'number' && typeof b === 'number') {
+            const d = b - a;
+            diff = `<span class="${d>=0?'positive':'negative'}">${d>=0?'+':''}${d.toFixed(2)}</span>`;
+        }
+        return `<tr><td>${label}</td><td>${a}</td><td>${b}</td><td>${diff}</td></tr>`;
+    }).join('');
+}
+
+function renderTriggerChart(r) {
+    const dist = r.trigger_distribution || {};
+    if (!Object.keys(dist).length) return;
+    const chart = echarts.init(document.getElementById('trigger-chart'));
+    const colors = {stoploss: '#f85149', takeprofit: '#3fb950', timeout: '#8b949e'};
+    chart.setOption({
+        tooltip: { trigger: 'item', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+        series: [{
+            type: 'pie', radius: ['40%', '70%'],
+            data: Object.entries(dist).map(([k,v]) => ({
+                name: k === 'stoploss' ? '止损' : k === 'takeprofit' ? '止盈' : '超时',
+                value: v,
+                itemStyle: { color: colors[k] || '#58a6ff' },
+            })),
+            label: { color: '#c9d1d9' },
+        }],
+    });
+    window.addEventListener('resize', () => chart.resize());
+}
+
+function renderSimEquity(r) {
+    const curve = r.equity_curve;
+    if (!curve || !curve.time || !curve.time.length) return;
+
+    const chart = echarts.init(document.getElementById('sim-equity-chart'));
+    const series = [];
+
+    if (curve.actual) {
+        series.push({
+            name: '实际', type: 'line', data: curve.actual,
+            lineStyle: { width: 2 }, itemStyle: { color: '#8b949e' },
+        });
+    }
+    if (curve.simulated) {
+        series.push({
+            name: '模拟', type: 'line', data: curve.simulated,
+            lineStyle: { width: 2 }, itemStyle: { color: '#1f6feb' },
+        });
+    }
+
+    chart.setOption({
+        tooltip: { trigger: 'axis', backgroundColor: '#161b22', borderColor: '#30363d', textStyle: { color: '#c9d1d9' }},
+        legend: { data: series.map(s => s.name), textStyle: { color: '#8b949e' }},
+        grid: { left: 60, right: 20, top: 30, bottom: 40 },
+        xAxis: { type: 'category', data: curve.time.map(t => String(t).substring(0,16)), axisLabel: { color: '#8b949e' }, axisLine: { lineStyle: { color: '#30363d' }}},
+        yAxis: { type: 'value', axisLabel: { color: '#8b949e' }, splitLine: { lineStyle: { color: '#21262d' }}},
+        series,
+    });
+    window.addEventListener('resize', () => chart.resize());
+}
+
+function renderSimTrades(r) {
+    const trades = r.trades || [];
+    window._simTrades = trades;
+
+    document.getElementById('sim-filter-trigger').onchange = filterSimTrades;
+    document.getElementById('sim-filter-diff').onchange = filterSimTrades;
+    filterSimTrades();
+}
+
+function filterSimTrades() {
+    const trades = window._simTrades || [];
+    const trigger = document.getElementById('sim-filter-trigger').value;
+    const diff = document.getElementById('sim-filter-diff').value;
+
+    let filtered = trades;
+    if (trigger) filtered = filtered.filter(t => t.trigger_type === trigger);
+    if (diff === 'better') filtered = filtered.filter(t => t.pnl_diff > 0);
+    if (diff === 'worse') filtered = filtered.filter(t => t.pnl_diff < 0);
+
+    const tbody = document.querySelector('#sim-trades-table tbody');
+    const triggerBadge = t => {
+        if (t === 'stoploss') return '<span class="badge badge-red">止损</span>';
+        if (t === 'takeprofit') return '<span class="badge badge-green">止盈</span>';
+        return '<span class="badge badge-blue">超时</span>';
+    };
+
+    tbody.innerHTML = filtered.slice(0, 300).map(t => {
+        const diffCls = t.pnl_diff >= 0 ? 'positive' : 'negative';
+        return `<tr>
+            <td>${t.symbol||''}</td>
+            <td>${t.direction||''}</td>
+            <td>${t.entry_price||''}</td>
+            <td>${triggerBadge(t.trigger_type)}</td>
+            <td>${t.exit_price||''}</td>
+            <td class="${t.simulated_pnl>=0?'positive':'negative'}">${(t.simulated_pnl||0).toFixed(2)}</td>
+            <td class="${t.original_pnl>=0?'positive':'negative'}">${(t.original_pnl||0).toFixed(2)}</td>
+            <td class="${diffCls}">${t.pnl_diff>=0?'+':''}${(t.pnl_diff||0).toFixed(2)}</td>
+            <td>${t.hold_bars||0}</td>
+        </tr>`;
+    }).join('');
+}
+</script>
+{% endblock %}
