@@ -337,6 +337,8 @@ async def api_backfill_float_loss():
 async def api_clear_trades():
     """清空所有交易记录及相关数据"""
     try:
+        from backtest.data.schema import get_connection
+        from backtest.config import TABLE_TRADE_RECORDS
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(f"DELETE FROM {TABLE_TRADE_RECORDS}")

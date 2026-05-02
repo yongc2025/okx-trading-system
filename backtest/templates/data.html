@@ -1,36 +1,5 @@
 {% extends "base.html" %} {% set active = "data" %} {% block title %}数据管理 -
 OKX 回测系统{% endblock %} {% block content %}
-<!-- OKX 连接配置 -->
-<div class="card">
-  <h2>🔗 OKX API 配置</h2>
-  <div class="api-form">
-    <div class="api-field">
-      <label>API Key</label>
-      <input
-        type="text"
-        id="cfg-api-key"
-        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-      />
-    </div>
-    <div class="api-field">
-      <label>Secret Key</label>
-      <input type="password" id="cfg-secret" placeholder="Secret Key" />
-    </div>
-    <div class="api-field short">
-      <label>Passphrase</label>
-      <input type="password" id="cfg-passphrase" placeholder="Passphrase" />
-    </div>
-    <div class="api-field inline">
-      <label><input type="checkbox" id="cfg-demo" checked /> 模拟盘</label>
-    </div>
-    <div class="api-field inline">
-      <button class="btn btn-primary" onclick="testConnection()">
-        测试连接
-      </button>
-      <span id="conn-status"></span>
-    </div>
-  </div>
-</div>
 
 <!-- K 线下载 -->
 <div class="card">
@@ -184,30 +153,25 @@ OKX 回测系统{% endblock %} {% block content %}
   </div>
 </div>
 
-<div class="two-col">
-  <!-- K 线数据概览 -->
-  <div class="card">
-    <h2>📊 K 线数据概览</h2>
-    <div id="kline-info-loading" class="loading">加载中...</div>
-    <div class="table-scroll" id="kline-info-table" style="display: none">
-      <table>
-        <thead>
-          <tr>
-            <th>币种</th>
-            <th>周期</th>
-            <th>起始</th>
-            <th>截止</th>
-            <th>条数</th>
-          </tr>
-        </thead>
-        <tbody id="kline-info-body"></tbody>
-      </table>
-    </div>
+<!-- 订单数据 -->
+<div class="card">
+  <h2>📋 订单数据</h2>
+  <p style="color: #8b949e; font-size: 13px; margin-bottom: 16px">
+    选择一种方式获取交易订单数据，用于后续的回测分析
+  </p>
+
+  <!-- Tab 切换 -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchOrderTab('csv')">
+      📄 CSV 导入
+    </button>
+    <button class="tab-btn" onclick="switchOrderTab('exchange')">
+      🔗 从交易所拉取
+    </button>
   </div>
 
-  <!-- CSV 导入 -->
-  <div class="card">
-    <h2>📄 CSV 订单导入</h2>
+  <!-- Tab: CSV 导入 -->
+  <div id="tab-csv" class="tab-panel active">
     <div style="margin-bottom: 12px">
       <button class="btn" onclick="downloadTemplate()">下载 CSV 模板</button>
     </div>
@@ -228,24 +192,12 @@ OKX 回测系统{% endblock %} {% block content %}
     </div>
     <div id="csv-result" style="font-size: 13px; margin-top: 8px"></div>
 
-    <div style="margin-top: 16px; border-top: 1px solid #30363d; padding-top: 16px">
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-        <button class="btn" onclick="backfillFloatLoss()">🔄 补算浮亏数据</button>
-        <span style="font-size: 13px; color: #8b949e">导入订单后，需先下载K线数据，再点击此按钮计算扛单分析所需的浮亏字段</span>
-      </div>
-      <div id="backfill-result" style="font-size: 13px; margin-top: 8px"></div>
-    </div>
-
-    <div style="margin-top: 16px; border-top: 1px solid #30363d; padding-top: 16px">
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-        <button class="btn btn-danger" onclick="clearTrades()">🗑️ 清空所有订单</button>
-        <span style="font-size: 13px; color: #8b949e">删除数据库中全部交易记录和持仓快照，不可恢复</span>
-      </div>
-      <div id="clear-result" style="font-size: 13px; margin-top: 8px"></div>
-    </div>
-
     <div
-      style="margin-top: 20px; border-top: 1px solid #30363d; padding-top: 16px"
+      style="
+        margin-top: 16px;
+        border-top: 1px solid #30363d;
+        padding-top: 16px;
+      "
     >
       <h2 style="font-size: 14px; margin-bottom: 12px">📋 CSV 格式说明</h2>
       <div style="font-size: 13px; color: #8b949e; line-height: 1.8">
@@ -258,6 +210,209 @@ OKX 回测系统{% endblock %} {% block content %}
         <p><b>direction：</b>long / short</p>
         <p><b>自动计算：</b>pnl, roi, is_win 等指标</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Tab: 从交易所拉取 -->
+  <div id="tab-exchange" class="tab-panel">
+    <!-- API 配置（折叠） -->
+    <div class="api-collapse" id="api-config-section">
+      <button class="api-collapse-toggle" onclick="toggleApiConfig()">
+        <span id="api-toggle-icon">▶</span>
+        <span>OKX API 配置</span>
+        <span id="api-config-badge" class="api-badge" style="display: none"
+          >未配置</span
+        >
+      </button>
+      <div class="api-collapse-body" id="api-config-body">
+        <div class="api-form">
+          <div class="api-field">
+            <label>API Key</label>
+            <input
+              type="text"
+              id="cfg-api-key"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            />
+          </div>
+          <div class="api-field">
+            <label>Secret Key</label>
+            <input type="password" id="cfg-secret" placeholder="Secret Key" />
+          </div>
+          <div class="api-field short">
+            <label>Passphrase</label>
+            <input
+              type="password"
+              id="cfg-passphrase"
+              placeholder="Passphrase"
+            />
+          </div>
+          <div class="api-field inline">
+            <label
+              ><input type="checkbox" id="cfg-demo" checked /> 模拟盘</label
+            >
+          </div>
+          <div class="api-field inline">
+            <button class="btn btn-primary" onclick="testConnection()">
+              测试连接
+            </button>
+            <span id="conn-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 拉取选项 -->
+    <div class="exchange-fetch-section" style="margin-top: 16px">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        "
+      >
+        <label style="color: #8b949e; font-size: 13px">产品类型:</label>
+        <select id="order-inst-type">
+          <option value="SWAP" selected>永续合约 (SWAP)</option>
+          <option value="SPOT">现货 (SPOT)</option>
+          <option value="FUTURES">交割合约 (FUTURES)</option>
+        </select>
+        <button
+          class="btn btn-primary"
+          id="btn-fetch-orders"
+          onclick="fetchOrders()"
+        >
+          拉取成交记录
+        </button>
+        <span
+          id="order-fetch-status"
+          style="font-size: 13px; margin-left: 8px"
+        ></span>
+      </div>
+      <p style="font-size: 12px; color: #8b949e">
+        需要先配置上方 API Key 并测试连接成功后才能拉取数据
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="two-col">
+  <!-- K 线数据概览 -->
+  <div class="card">
+    <h2>📊 K 线数据概览</h2>
+    <!-- 按币种筛选 -->
+    <div
+      style="
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      "
+    >
+      <input
+        type="text"
+        id="kline-filter"
+        placeholder="输入币种筛选，如 BTC..."
+        style="
+          padding: 6px 10px;
+          border-radius: 6px;
+          border: 1px solid #30363d;
+          background: #0d1117;
+          color: #c9d1d9;
+          font-size: 13px;
+          width: 200px;
+        "
+        oninput="filterKlineInfo()"
+      />
+      <span
+        id="kline-filter-count"
+        style="font-size: 12px; color: #8b949e"
+      ></span>
+    </div>
+    <div id="kline-info-loading" class="loading">加载中...</div>
+    <div class="table-scroll" id="kline-info-table" style="display: none">
+      <table>
+        <thead>
+          <tr>
+            <th>币种</th>
+            <th>周期</th>
+            <th>起始</th>
+            <th>截止</th>
+            <th>条数</th>
+          </tr>
+        </thead>
+        <tbody id="kline-info-body"></tbody>
+      </table>
+      <!-- 分页控件 -->
+      <div
+        id="kline-pagination"
+        style="
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 8px;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        "
+      >
+        <button
+          class="btn"
+          id="kline-prev"
+          onclick="klinePageChange(-1)"
+          disabled
+          style="padding: 4px 12px; font-size: 13px"
+        >
+          上一页
+        </button>
+        <span
+          id="kline-page-info"
+          style="font-size: 13px; color: #8b949e"
+        ></span>
+        <button
+          class="btn"
+          id="kline-next"
+          onclick="klinePageChange(1)"
+          disabled
+          style="padding: 4px 12px; font-size: 13px"
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 数据工具 -->
+  <div class="card">
+    <h2>🛠 数据工具</h2>
+
+    <div style="margin-bottom: 16px">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <button class="btn" onclick="backfillFloatLoss()">🔄 补算浮亏数据</button>
+        <span style="font-size: 13px; color: #8b949e"
+          >导入订单后，需先下载 K 线数据，再点击此按钮计算扛单分析所需的浮亏字段</span
+        >
+      </div>
+      <div id="backfill-result" style="font-size: 13px; margin-top: 8px"></div>
+    </div>
+
+    <div
+      style="
+        margin-top: 16px;
+        border-top: 1px solid #30363d;
+        padding-top: 16px;
+      "
+    >
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <button class="btn btn-danger" onclick="clearTrades()">
+          🗑️ 清空所有订单
+        </button>
+        <span style="font-size: 13px; color: #8b949e"
+          >删除数据库中全部交易记录和持仓快照，不可恢复</span
+        >
+      </div>
+      <div id="clear-result" style="font-size: 13px; margin-top: 8px"></div>
     </div>
   </div>
 </div>
@@ -282,6 +437,89 @@ OKX 回测系统{% endblock %} {% block content %}
 </div>
 {% endblock %} {% block scripts %}
 <style>
+  /* ===== Tab 切换 ===== */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #30363d;
+    margin-bottom: 16px;
+  }
+  .tab-btn {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #8b949e;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover {
+    color: #c9d1d9;
+    background: rgba(88, 166, 255, 0.05);
+  }
+  .tab-btn.active {
+    color: #58a6ff;
+    border-bottom-color: #58a6ff;
+  }
+  .tab-panel {
+    display: none;
+  }
+  .tab-panel.active {
+    display: block;
+  }
+
+  /* ===== API 配置折叠 ===== */
+  .api-collapse {
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .api-collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    background: #161b22;
+    border: none;
+    color: #c9d1d9;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .api-collapse-toggle:hover {
+    background: #1c2129;
+  }
+  #api-toggle-icon {
+    font-size: 11px;
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  .api-collapse.open #api-toggle-icon {
+    transform: rotate(90deg);
+  }
+  .api-collapse-body {
+    display: none;
+    padding: 16px;
+    border-top: 1px solid #30363d;
+    background: #0d1117;
+  }
+  .api-collapse.open .api-collapse-body {
+    display: block;
+  }
+  .api-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f85149;
+    color: #fff;
+    margin-left: auto;
+  }
+  .api-badge.ok {
+    background: #3fb950;
+  }
+
   /* ===== API 配置表单 ===== */
   .api-form {
     display: flex;
@@ -502,11 +740,51 @@ OKX 回测系统{% endblock %} {% block content %}
     font-size: 14px;
     height: 32px;
   }
+
+  /* ===== 交易所拉取区域 ===== */
+  #order-inst-type {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    font-size: 13px;
+    height: 34px;
+  }
 </style>
 
 <script>
+  // ===== Tab 切换 =====
+  function switchOrderTab(tab) {
+    document
+      .querySelectorAll(".tab-btn")
+      .forEach((b) => b.classList.remove("active"));
+    document
+      .querySelectorAll(".tab-panel")
+      .forEach((p) => p.classList.remove("active"));
+
+    if (tab === "csv") {
+      document.querySelectorAll(".tab-btn")[0].classList.add("active");
+      document.getElementById("tab-csv").classList.add("active");
+    } else {
+      document.querySelectorAll(".tab-btn")[1].classList.add("active");
+      document.getElementById("tab-exchange").classList.add("active");
+    }
+  }
+
+  // ===== API 配置折叠 =====
+  let apiConfigExpanded = false;
+  function toggleApiConfig() {
+    const section = document.getElementById("api-config-section");
+    apiConfigExpanded = !apiConfigExpanded;
+    if (apiConfigExpanded) {
+      section.classList.add("open");
+    } else {
+      section.classList.remove("open");
+    }
+  }
+
   // ===== 币种管理 =====
-  // 常见 OKX 永续合约（动态扩展）
   let ALL_SYMBOLS = [
     "BTC-USDT-SWAP",
     "ETH-USDT-SWAP",
@@ -542,22 +820,20 @@ OKX 回测系统{% endblock %} {% block content %}
     "1000SATS-USDT-SWAP",
   ];
 
-  // 已订阅集合
   const subscribed = new Set(["BTC-USDT-SWAP", "ETH-USDT-SWAP"]);
 
-  // 去重 & 排序
   function refreshSymbolList() {
     ALL_SYMBOLS = [...new Set(ALL_SYMBOLS)].sort();
   }
 
-  // 渲染下拉列表
   function renderDropdown(filter = "") {
     const el = document.getElementById("symbol-dropdown");
     const q = filter.toUpperCase().trim();
-    const filtered = q ? ALL_SYMBOLS.filter((s) => s.includes(q)) : ALL_SYMBOLS;
+    const filtered = q
+      ? ALL_SYMBOLS.filter((s) => s.includes(q))
+      : ALL_SYMBOLS;
 
     if (!filtered.length) {
-      // 允许直接添加自定义币种
       const custom = filter.trim().toUpperCase();
       if (custom && !ALL_SYMBOLS.includes(custom)) {
         const full = custom.endsWith("-USDT-SWAP")
@@ -586,7 +862,6 @@ OKX 回测系统{% endblock %} {% block content %}
       .join("");
   }
 
-  // 渲染已订阅标签
   function renderTags() {
     const el = document.getElementById("symbol-tags");
     if (subscribed.size === 0) {
@@ -613,7 +888,6 @@ OKX 回测系统{% endblock %} {% block content %}
       subscribed.add(sym);
     }
     renderTags();
-    // 刷新下拉（如果开着）
     const dropdown = document.getElementById("symbol-dropdown");
     if (dropdown.classList.contains("open")) {
       renderDropdown(document.getElementById("symbol-search").value);
@@ -644,7 +918,6 @@ OKX 回测系统{% endblock %} {% block content %}
     document.getElementById("symbol-dropdown").classList.remove("open");
   }
 
-  // 搜索输入事件
   const searchInput = document.getElementById("symbol-search");
   searchInput.addEventListener("focus", () => {
     renderDropdown(searchInput.value);
@@ -654,7 +927,6 @@ OKX 回测系统{% endblock %} {% block content %}
     renderDropdown(searchInput.value);
     document.getElementById("symbol-dropdown").classList.add("open");
   });
-  // 点击外部关闭
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".symbol-selector-wrap")) closeDropdown();
   });
@@ -670,7 +942,6 @@ OKX 回测系统{% endblock %} {% block content %}
       mode === "custom" ? "flex" : "none";
     document.getElementById("dl-days").disabled = mode === "custom";
   }
-  // 默认日期
   const now = new Date();
   document.getElementById("dl-end-date").value = now
     .toISOString()
@@ -680,35 +951,85 @@ OKX 回测系统{% endblock %} {% block content %}
     .toISOString()
     .split("T")[0];
 
-  // ===== K 线数据概览
+  // ===== K 线数据概览（带筛选 + 分页）
+  let klineData = [];
+  let klineFiltered = [];
+  let klinePage = 1;
+  const KLINE_PAGE_SIZE = 10;
+
   async function loadKlineInfo() {
     try {
       const resp = await fetch("/api/kline-info");
-      const data = await resp.json();
+      klineData = await resp.json();
       document.getElementById("kline-info-loading").style.display = "none";
       document.getElementById("kline-info-table").style.display = "block";
-      const tbody = document.getElementById("kline-info-body");
-      if (!data.length) {
-        tbody.innerHTML =
-          '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
-        return;
-      }
-      tbody.innerHTML = data
-        .map(
-          (r) => `<tr>
+      filterKlineInfo();
+    } catch (e) {
+      document.getElementById("kline-info-loading").textContent =
+        "加载失败: " + e.message;
+    }
+  }
+
+  function filterKlineInfo() {
+    const q = document
+      .getElementById("kline-filter")
+      .value.toUpperCase()
+      .trim();
+    klineFiltered = q
+      ? klineData.filter((r) => r.symbol.toUpperCase().includes(q))
+      : klineData;
+    klinePage = 1;
+    renderKlineInfo();
+  }
+
+  function renderKlineInfo() {
+    const tbody = document.getElementById("kline-info-body");
+    const countEl = document.getElementById("kline-filter-count");
+    const totalPages = Math.max(
+      1,
+      Math.ceil(klineFiltered.length / KLINE_PAGE_SIZE),
+    );
+
+    if (!klineFiltered.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="5" style="text-align:center;color:#8b949e">暂无数据</td></tr>';
+      countEl.textContent = "";
+      updateKlinePagination(0, 0);
+      return;
+    }
+
+    countEl.textContent = `共 ${klineFiltered.length} 条`;
+    const start = (klinePage - 1) * KLINE_PAGE_SIZE;
+    const pageData = klineFiltered.slice(start, start + KLINE_PAGE_SIZE);
+
+    tbody.innerHTML = pageData
+      .map(
+        (r) => `<tr>
             <td>${r.symbol}</td>
             <td><span class="badge badge-blue">${r.bar}</span></td>
             <td>${(r.first_time || "").substring(0, 16)}</td>
             <td>${(r.last_time || "").substring(0, 16)}</td>
             <td>${r.count}</td>
         </tr>`,
-        )
-        .join("");
-    } catch (e) {
-      document.getElementById("kline-info-loading").textContent =
-        "加载失败: " + e.message;
-    }
+      )
+      .join("");
+
+    updateKlinePagination(klinePage, totalPages);
   }
+
+  function updateKlinePagination(page, totalPages) {
+    document.getElementById("kline-prev").disabled = page <= 1;
+    document.getElementById("kline-next").disabled = page >= totalPages;
+    document.getElementById("kline-page-info").textContent =
+      totalPages > 0 ? `第 ${page} / ${totalPages} 页` : "";
+  }
+
+  function klinePageChange(delta) {
+    const totalPages = Math.ceil(klineFiltered.length / KLINE_PAGE_SIZE);
+    klinePage = Math.max(1, Math.min(totalPages, klinePage + delta));
+    renderKlineInfo();
+  }
+
   loadKlineInfo();
 
   // ===== OKX 连接测试
@@ -728,16 +1049,54 @@ OKX 回测系统{% endblock %} {% block content %}
         }),
       });
       const data = await resp.json();
+      const badge = document.getElementById("api-config-badge");
       if (data.ok) {
         el.textContent = "✅ 连接成功";
         el.style.color = "#3fb950";
+        badge.textContent = "已连接";
+        badge.className = "api-badge ok";
+        badge.style.display = "inline";
       } else {
         el.textContent = "❌ " + (data.error || "连接失败");
         el.style.color = "#f85149";
+        badge.textContent = "连接失败";
+        badge.className = "api-badge";
+        badge.style.display = "inline";
       }
     } catch (e) {
       el.textContent = "❌ 请求失败";
       el.style.color = "#f85149";
+    }
+  }
+
+  // ===== 从交易所拉取订单
+  async function fetchOrders() {
+    const btn = document.getElementById("btn-fetch-orders");
+    const status = document.getElementById("order-fetch-status");
+    btn.disabled = true;
+    status.textContent = "拉取中...";
+    status.style.color = "#8b949e";
+
+    const instType = document.getElementById("order-inst-type").value;
+    try {
+      const resp = await fetch("/api/orders/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inst_type: instType }),
+      });
+      const data = await resp.json();
+      if (data.error) {
+        status.textContent = "❌ " + data.error;
+        status.style.color = "#f85149";
+      } else {
+        status.textContent = `✅ 成交 ${data.total_fills} 条，配对 ${data.paired_trades} 笔交易`;
+        status.style.color = "#3fb950";
+      }
+    } catch (e) {
+      status.textContent = "❌ " + e.message;
+      status.style.color = "#f85149";
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -918,8 +1277,10 @@ OKX 回测系统{% endblock %} {% block content %}
         el.innerHTML = `<span style="color:#f85149">❌ ${data.error}</span>`;
       } else {
         let html = `<span style="color:#3fb950">✅ 补算完成：更新 ${data.updated} 条，跳过 ${data.skipped} 条</span>`;
-        if (data.message) html += `<br><span style="color:#8b949e">${data.message}</span>`;
-        if (data.errors && data.errors.length) html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
+        if (data.message)
+          html += `<br><span style="color:#8b949e">${data.message}</span>`;
+        if (data.errors && data.errors.length)
+          html += `<br><span style="color:#f85149">${data.errors.join("<br>")}</span>`;
         el.innerHTML = html;
       }
     } catch (e) {

@@ -617,8 +617,18 @@ class OrderImporter:
     OPTIONAL_COLUMNS = {"leverage", "entry_cost", "max_floating_loss", "max_floating_loss_rate"}
     # 合法 direction
     VALID_DIRECTIONS = {"long", "short"}
-    # 时间格式
-    TIME_FORMAT = "%Y-%m-%d %H:%M"
+    # 时间格式（兼容有秒和无秒两种）
+    TIME_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]
+
+    @staticmethod
+    def _parse_time(time_str: str) -> datetime | None:
+        """尝试多种格式解析时间字符串"""
+        for fmt in OrderImporter.TIME_FORMATS:
+            try:
+                return datetime.strptime(time_str, fmt)
+            except ValueError:
+                continue
+        return None
 
     @staticmethod
     def generate_template(output_path: str | Path) -> Path:
@@ -643,7 +653,7 @@ class OrderImporter:
             # 示例行
             writer.writerow([
                 "BTC-USDT-SWAP", "long", "2025-01-15 10:30", "42500.5",
-                "2025-01-15 14:20", "43100.2", "3", "1000",
+                "2025-01-15 14:20:30", "43100.2", "3", "1000",
             ])
 
         logger.info(f"[OrderImporter] 模板已生成: {output_path}")
@@ -698,15 +708,13 @@ class OrderImporter:
                     # 解析时间
                     entry_time_str = clean_row.get("entry_time", "")
                     exit_time_str = clean_row.get("exit_time", "")
-                    try:
-                        entry_time = datetime.strptime(entry_time_str, OrderImporter.TIME_FORMAT)
-                    except ValueError:
-                        errors.append(f"第 {row_num} 行: entry_time 格式错误 '{entry_time_str}'，应为 YYYY-MM-DD HH:MM")
+                    entry_time = OrderImporter._parse_time(entry_time_str)
+                    if entry_time is None:
+                        errors.append(f"第 {row_num} 行: entry_time 格式错误 '{entry_time_str}'，应为 YYYY-MM-DD HH:MM 或 YYYY-MM-DD HH:MM:SS")
                         continue
-                    try:
-                        exit_time = datetime.strptime(exit_time_str, OrderImporter.TIME_FORMAT)
-                    except ValueError:
-                        errors.append(f"第 {row_num} 行: exit_time 格式错误 '{exit_time_str}'，应为 YYYY-MM-DD HH:MM")
+                    exit_time = OrderImporter._parse_time(exit_time_str)
+                    if exit_time is None:
+                        errors.append(f"第 {row_num} 行: exit_time 格式错误 '{exit_time_str}'，应为 YYYY-MM-DD HH:MM 或 YYYY-MM-DD HH:MM:SS")
                         continue
 
                     if exit_time <= entry_time:
